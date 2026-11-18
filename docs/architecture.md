@@ -4,7 +4,7 @@ EcoPulse AI is a local-first energy intelligence system. This document describes
 the boundaries that matter now, the target data path, and the decisions that
 keep later phases maintainable.
 
-**Document status:** Phase 1 implemented, later phases planned.
+**Document status:** Phases 1-3 implemented, later phases planned.
 
 ---
 
@@ -289,13 +289,18 @@ rate limiting, and dependency scanning must be designed first.
 
 ## 12. Phase boundary
 
-Phase 1 ends at a runnable foundation. It deliberately does **not** include:
+Phases 1-3 end at a runnable foundation and a reproducible local data pipeline:
 
-- source downloads or manifests,
-- energy domain tables,
+- Phase 1: monorepo, API, database wiring, frontend shell, containers and CI.
+- Phase 2: raw dataset inspection, EDA, reports and figures.
+- Phase 3: deterministic cleaning, feature engineering, gap-aware aggregation,
+  validation and four Parquet outputs.
+
+The project still deliberately does **not** include:
+
+- domain ingestion into PostgreSQL or energy domain tables,
 - Airflow DAGs or Spark jobs,
-- feature engineering or model training,
-- forecasts or anomaly scores,
+- model training, forecasts or anomaly scores,
 - consumption dashboards,
 - cloud deployment.
 

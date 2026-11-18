@@ -1,0 +1,82 @@
+==============================================================================
+ECOPULSE AI - PHASE 3 ETL EXECUTION REPORT
+==============================================================================
+Execution started (UTC):  2026-11-18T10:09:20Z
+Execution finished (UTC): 2026-11-18T10:10:15Z
+Duration:                 54.976 seconds
+Final execution status:   SUCCESS WITH WARNINGS
+
+1. INPUT
+------------------------------------------------------------------------------
+Input file:        data/raw/household_power_consumption.txt
+File size:         126.80 MB
+SHA-256:           4259c9d7ece5dbee9ab8d53682baac68d791c864f0f64a52b4043cb3b90894b7
+Expected SHA-256:  4259c9d7ece5dbee9ab8d53682baac68d791c864f0f64a52b4043cb3b90894b7
+Checksum match:    YES
+Input policy:      read-only; the raw file was not modified.
+
+2. EXECUTION STAGES
+------------------------------------------------------------------------------
+    Stage    Status Duration (s)
+  Extract COMPLETED       19.010
+    Clean COMPLETED       13.673
+Transform COMPLETED       10.713
+     Load COMPLETED        4.075
+ Validate COMPLETED        7.504
+
+3. RECORD COUNTS
+------------------------------------------------------------------------------
+Original records:             2,075,259
+Fully missing records:        25,979
+Interpolated records:         76
+Unresolved records removed:   25,903
+Final cleaned records:        2,049,356
+Duplicate records removed:    0
+Outliers removed:             0
+Measured energy:              37,283.747700 kWh
+Imputed energy:               2.422850 kWh
+Total energy:                 37,286.170550 kWh
+
+4. OUTPUT FILES
+------------------------------------------------------------------------------
+                                          File      Rows  Columns      Size                                                          SHA-256
+data/processed/household_power_cleaned.parquet 2,049,356       18  26.95 MB 6b662e4f2ddc3b069308e745f21516ee9e0a8a62b0346c45d788a085bc34ee22
+ data/processed/household_power_hourly.parquet    34,589       20   1.54 MB 2b8da2073ee90a88bdb94c24bad0786b3dab8b143c4e5d6850a63044e05f8a75
+  data/processed/household_power_daily.parquet     1,442       20 150.40 KB 8df351774de5c516187af92c2f57164fb0fc4d2b49b587ab6d29f3ca1ffd48a6
+data/processed/household_power_monthly.parquet        48       20  20.00 KB 887fdea34b8767ba12dde88cf61df88e9a804c8208df894a8f108784c97521ae
+
+5. GENERATED REPORTS
+------------------------------------------------------------------------------
+                                                    Report Exists     Size
+              reports/data-engineering/cleaning_report.txt    YES  9.65 KB
+reports/data-engineering/missing_values_after_cleaning.csv    YES 415.00 B
+        reports/data-engineering/transformation_report.txt    YES  7.04 KB
+       reports/data-engineering/data_validation_report.txt    YES 13.66 KB
+This execution report: reports/data-engineering/etl_execution_report.txt
+
+6. ERRORS AND WARNINGS
+------------------------------------------------------------------------------
+Errors: None.
+
+Validation warnings: 6
+  - Data quality: Timestamps are naive local civil time
+  - Data quality: 76 rows contain short-gap interpolation
+  - Data quality: 25,903 unresolved rows were removed for modelling
+  - Data quality: IQR outliers were retained
+  - Data quality: 1,050 minutes have sub-metered energy above whole-house
+    energy
+  - Aggregation: Incomplete intervals are present and explicitly flagged
+Validation failures: None.
+
+7. REPRODUCIBILITY
+------------------------------------------------------------------------------
+- The pipeline is safe to rerun: derived columns and Parquet files are
+  recreated from the immutable raw file.
+- The raw SHA-256 checksum is verified before processing.
+- Cleaning and transformation are deterministic for the same input.
+- Validation includes Pandera schemas and Parquet readback checks.
+
+8. FINAL STATUS
+------------------------------------------------------------------------------
+SUCCESS WITH WARNINGS
+==============================================================================

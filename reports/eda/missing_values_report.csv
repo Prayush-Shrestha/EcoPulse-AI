@@ -1,0 +1,10 @@
+Column,Total Records,Missing Values,Non-Missing Values,Missing Percentage
+Date,2075259,0,2075259,0.0
+Time,2075259,0,2075259,0.0
+Global_active_power,2075259,25979,2049280,1.2518
+Global_reactive_power,2075259,25979,2049280,1.2518
+Voltage,2075259,25979,2049280,1.2518
+Global_intensity,2075259,25979,2049280,1.2518
+Sub_metering_1,2075259,25979,2049280,1.2518
+Sub_metering_2,2075259,25979,2049280,1.2518
+Sub_metering_3,2075259,25979,2049280,1.2518

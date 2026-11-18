@@ -1,0 +1,96 @@
+==============================================================================
+ECOPULSE AI - PHASE 2 DATA QUALITY REPORT
+==============================================================================
+Generated (UTC): 2026-11-18T09:04:55+00:00
+Dataset: Individual Household Electric Power Consumption
+Scope: Phase 2 inspection only. No cleaning, imputation or outlier removal.
+
+1. MISSING-VALUE OBSERVATIONS
+------------------------------------------------------------------------------
+- 181,853 missing cells were found across 7 of 9 columns.
+- All 7 affected columns (Global_active_power, Global_reactive_power, Voltage,
+  Global_intensity, Sub_metering_1, Sub_metering_2, Sub_metering_3) contain
+  the same 25,979 missing values (1.2518%).
+- 25,979 rows contain at least one missing value; 2,049,280 rows (98.7482%)
+  are complete.
+- In 25,979 of those rows, all seven measurement fields are missing
+  simultaneously; 0 rows show partial numeric missingness.
+- 9 calendar days contain no valid measurement at all; 22 days have less than
+  90% complete measurement coverage.
+- The Date and Time columns contain no missing values.
+- Missing readings are blocks of unknown consumption, not measured zeros.
+
+2. DUPLICATE-RECORD OBSERVATIONS
+------------------------------------------------------------------------------
+- Duplicate complete rows: 0.
+- Valid timestamps: 2,075,259; duplicate valid timestamps: 0.
+- Invalid timestamps excluded from duplicate checks: 0.
+
+3. INVALID TIMESTAMP OBSERVATIONS
+------------------------------------------------------------------------------
+- 0 Date/Time combinations failed parsing with format %d/%m/%Y %H:%M:%S.
+- Earliest valid timestamp: 2006-12-16 17:24:00.
+- Latest valid timestamp: 2010-11-26 21:02:00.
+- The 2,075,259 valid readings cover 100.0000% of the ideal one-minute grid
+  (2,075,259 slots).
+- The raw timestamps carry no UTC offset or timezone name. They are local
+  wall-clock values for a household in France, so Europe/Paris time must be
+  assumed and validated explicitly in Phase 3.
+- Local-time datasets can contain ambiguous or skipped readings around
+  daylight-saving transitions; the checks above found 0 duplicate valid
+  timestamps.
+
+4. DATA TYPE OBSERVATIONS
+------------------------------------------------------------------------------
+- Date and Time are stored as text in the raw file and are combined into one
+  timestamp during inspection.
+- The seven measurement columns are numeric after conversion; '?' values
+  become NaN rather than zero.
+- Units: Global_active_power and Global_reactive_power in kW, Voltage in V,
+  Global_intensity in A, and the three sub-metering columns in Wh per minute.
+- Memory usage (deep) of the loaded frame: 338.33 MB.
+
+5. POTENTIAL DATA QUALITY CONCERNS
+------------------------------------------------------------------------------
+- Block missingness: the 25,979 fully missing rows would understate daily or
+  monthly energy totals if treated as zero.
+- The sub-metering columns cover only selected circuits. Total metered
+  sub-metering is 18,195.33 kWh against 37,283.75 kWh of whole-house active
+  energy (48.80% coverage), leaving 19,088.41 kWh unattributed to a monitored
+  circuit.
+- Sub-metering values of zero are valid idle periods and must remain distinct
+  from missing readings.
+- The one-minute timestamps are local civil time without an offset;
+  daylight-saving transitions and any downstream UTC conversion need an
+  explicit policy.
+- Measurements are rounded to three decimal places, which limits precision for
+  very small per-minute values.
+- Extreme but plausible values remain in the raw data; Phase 2 does not remove
+  or cap outliers.
+
+6. RECOMMENDATIONS FOR THE NEXT ETL PHASE
+------------------------------------------------------------------------------
+- Keep data/raw immutable and record the source URL, retrieval date, licence
+  and SHA-256 checksum in the ingestion manifest.
+- Parse Date and Time once, attach the Europe/Paris source timezone, convert
+  to UTC, and store the original local timestamp alongside it.
+- Enforce a unique timestamp constraint and sort chronologically before
+  loading to PostgreSQL.
+- Preserve a missing-value mask; never convert '?' to zero. Decide and
+  document whether gaps are flagged, imputed or excluded for each downstream
+  use case.
+- Derive energy in kWh explicitly (Global_active_power / 60 per minute,
+  sub-metering Wh / 1000) and aggregate with missing minutes tracked.
+- Validate physical ranges (non-negative power and energy, plausible voltage
+  and current) and flag violations rather than silently dropping them.
+- Keep zero sub-metering readings separate from missing values during
+  validation and transformation.
+- Store curated data as partitioned Parquet for analysis and in PostgreSQL for
+  application access; both must be reproducible from the raw file.
+
+Sub-metering energy totals used in this assessment:
+  - Sub_metering_1: 2,299.14 kWh
+  - Sub_metering_2: 2,661.03 kWh
+  - Sub_metering_3: 13,235.17 kWh
+  - Whole-house active energy: 37,283.75 kWh
+==============================================================================

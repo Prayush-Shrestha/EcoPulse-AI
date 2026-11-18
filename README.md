@@ -7,9 +7,10 @@ combines data engineering, machine learning, and full-stack development on a
 fully inspectable local stack: no cloud hosting, no paid services, and no
 invented production data.
 
-> **Project status: Phase 1 - Foundation.**
+> **Project status: Phase 2 - Dataset and EDA.**
 > The monorepo, interface, API health contract, database wiring, containers, and
-> CI are in place. Dataset ingestion, models, and analytics views are
+> CI are in place. Phase 2 adds the raw UCI dataset, inspection reports, and an
+> executed EDA notebook. Domain ingestion, models, and analytics views are
 > deliberately not implemented yet.
 
 ---
@@ -36,8 +37,8 @@ run, and verified by another developer.
 - No ML predictions, anomaly scores, or model artefacts in this phase.
 - No cloud infrastructure, paid APIs, or live deployment.
 - No authentication or multi-user tenancy; this is a local single-user project.
-- No Airflow or Spark runtime in Phase 1. They are documented in the target
-  architecture and will be added with the data layer.
+- No Airflow or Spark runtime in Phase 2. They are documented in the target
+  architecture and will be added with the data pipeline.
 
 ---
 
@@ -84,8 +85,15 @@ Implemented in Phase 1:
 - PostgreSQL and application images wired through Docker Compose
 - CI for backend lint/tests, frontend lint/types/build, and Compose validation
 
-Not implemented: dataset download, schema domain models, Airflow DAGs, Spark
-jobs, trained models, forecasts, anomaly detection, and energy dashboards.
+Phase 2 adds:
+
+- UCI Individual Household Electric Power Consumption dataset pinned in `data/raw/`
+- Dataset inspection script and five generated reports in `reports/eda/`
+- Executed EDA notebook with ten saved figures (`reports/eda/figures/`)
+
+Still not implemented: automated dataset download, domain ingestion, schema
+domain models, Airflow DAGs, Spark jobs, trained models, forecasts, anomaly
+detection, and energy dashboards.
 
 ---
 
@@ -271,10 +279,10 @@ validated there and local builds are documented in
 
 ## Data principles
 
-The project uses real public datasets only. Candidate sources are listed on the
-product surface and documented in the data directory. Phase 2 will add the final
-source selection, retrieval manifest, licence review, and checksums before any
-data is ingested.
+The project uses real public datasets only. Phase 2 selects the UCI household
+dataset, records its source, licence and SHA-256 checksum, and profiles it before
+any data is ingested. Automated retrieval and the formal manifest are future
+work.
 
 - Raw data stays immutable in `data/raw/`.
 - Processed data is reproducible, never hand-edited.
@@ -321,8 +329,8 @@ Full tokens and usage rules are in
 
 ## Known limitations
 
-- Phase 1 only: no ingested data, domain tables, models, predictions, or energy
-  charts.
+- Phase 2 only: no ingested domain data, domain tables, models, predictions, or
+  live energy charts. The raw dataset and EDA reports are local files.
 - Airflow is not running natively or in Compose yet; it is container-only on
   Windows and will arrive with the pipeline phase.
 - The Docker images have not been exercised automatically in CI.
@@ -334,9 +342,10 @@ Full tokens and usage rules are in
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 01 | Foundation: monorepo, UI shell, API, database wiring, containers, CI | Current |
-| 02 | Data foundation: source selection, ingestion, schema, Airflow, Spark | Not started |
-| 03 | Intelligence: features, forecasts, anomaly detection, evaluation | Not started |
-| 04 | Experience: real-data dashboards, integration and end-to-end tests | Not started |
+| 01 | Foundation: monorepo, UI shell, API, database wiring, containers, CI | Complete |
+| 02 | Dataset collection, inspection, EDA, reports and findings | Complete |
+| 03 | Data foundation: ingestion, schema, Airflow, Spark | Not started |
+| 04 | Intelligence: features, forecasts, anomaly detection, evaluation | Not started |
+| 05 | Experience: real-data dashboards, integration and end-to-end tests | Not started |
 
-This repository intentionally stops at Phase 1.
+Phase 2 is complete. Phase 3 and later remain intentionally unimplemented.

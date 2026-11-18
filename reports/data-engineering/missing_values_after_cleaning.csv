@@ -1,0 +1,10 @@
+Column,Total Records,Missing Values,Non-Missing Values,Missing Percentage
+timestamp,2049356,0,2049356,0.0
+Global_active_power,2049356,0,2049356,0.0
+Global_reactive_power,2049356,0,2049356,0.0
+Voltage,2049356,0,2049356,0.0
+Global_intensity,2049356,0,2049356,0.0
+Sub_metering_1,2049356,0,2049356,0.0
+Sub_metering_2,2049356,0,2049356,0.0
+Sub_metering_3,2049356,0,2049356,0.0
+is_imputed,2049356,0,2049356,0.0

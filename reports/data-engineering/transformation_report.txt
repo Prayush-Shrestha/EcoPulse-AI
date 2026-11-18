@@ -1,0 +1,147 @@
+==============================================================================
+ECOPULSE AI - PHASE 3 DATA TRANSFORMATION REPORT
+==============================================================================
+Generated (UTC): 2026-11-18T10:10:07Z
+Dataset: Individual Household Electric Power Consumption
+Scope: feature engineering and aggregation only; no model was trained.
+
+1. INPUT
+------------------------------------------------------------------------------
+Input file:          data/processed/household_power_cleaned.parquet
+Input rows:          2,049,356
+Input columns:       9
+Input policy:        unresolved rows already excluded by the cleaning stage
+First timestamp:     2006-12-16 17:24:00
+Last timestamp:      2010-11-26 21:02:00
+Expected minute slots in range: 2,075,259
+
+2. NEW FEATURES
+------------------------------------------------------------------------------
+Datetime features are computed from the timestamp only. No lag, rolling
+window, future observation, target encoding or other leakage-prone feature
+is created in Phase 3.
+
+               Feature    Type                            Source
+                  year   int16                 timestamp.dt.year
+                 month    int8                timestamp.dt.month
+                   day    int8                  timestamp.dt.day
+                  hour    int8                 timestamp.dt.hour
+                minute    int8               timestamp.dt.minute
+           day_of_week    int8 timestamp.dt.dayofweek (Monday=0)
+              day_name  string           timestamp.dt.day_name()
+            is_weekend    bool                  day_of_week >= 5
+energy_consumption_kwh float64          Global_active_power / 60
+
+3. DATETIME TRANSFORMATIONS
+------------------------------------------------------------------------------
+- Date and Time were parsed in the cleaning stage into one naive local
+  timestamp with format %d/%m/%Y %H:%M:%S.
+- year, month, day, hour and minute describe the local wall-clock value.
+- day_of_week uses Monday=0 and Sunday=6; day_name is the English name.
+- is_weekend is true for Saturday and Sunday.
+- The dataset is sorted chronologically by timestamp.
+- Timestamps remain naive local civil time. No UTC offset is invented and
+  no daylight-saving shift is applied in Phase 3.
+
+4. ENERGY CALCULATION
+------------------------------------------------------------------------------
+Formula:             energy_consumption_kwh = Global_active_power / 60
+Input unit:          Global_active_power is a one-minute average in kW
+Output unit:         kWh for that valid minute
+Missing readings:    energy is NaN; it is never replaced by zero
+Total energy:        37,286.170550 kWh
+Valid-reading energy: 37,283.747700 kWh (measured minutes only)
+Imputed energy:      2.422850 kWh (76 rows flagged)
+Continuity:          total = valid-reading energy + imputed energy;
+                     the valid-reading total must match Phase 2.
+Sub-metered total:   18,196.410000 kWh (48.80% of whole-house energy)
+Sub-metering units:  Wh per minute divided by 1000 for kWh
+
+5. AGGREGATION INFORMATION
+------------------------------------------------------------------------------
+Frequency labels: hourly=h, daily=D, monthly=MS (month start).
+Each aggregate includes every expected interval across the full source
+range, including intervals with no valid reading. Expected counts come
+from the complete one-minute grid, not from surviving rows.
+
+  Level  Intervals  Complete  Incomplete  Empty  Expected minutes  Valid minutes  Imputed minutes  Total kWh  Min coverage %
+ hourly      34589     34141         448    421           2075259        2049356               76 37286.1705          0.0000
+  daily       1442      1412          30      9           2075259        2049356               76 37286.1706          0.0000
+monthly         48        34          14      0           2075259        2049356               76 37286.1706         83.8127
+
+Per-level details:
+  HOURLY
+    Intervals:            34,589
+    Complete intervals:   34,141
+    Incomplete intervals: 448
+    Empty intervals:      421
+    Expected minutes:     2,075,259
+    Valid minutes:        2,049,356
+    Imputed minutes:      76
+    Total energy:         37,286.170550 kWh
+    First period:         2006-12-16 17:00:00
+    Last period:          2010-11-26 21:00:00
+    Minimum coverage:     0.0000%
+    Mean coverage:        98.7519%
+
+  DAILY
+    Intervals:            1,442
+    Complete intervals:   1,412
+    Incomplete intervals: 30
+    Empty intervals:      9
+    Expected minutes:     2,075,259
+    Valid minutes:        2,049,356
+    Imputed minutes:      76
+    Total energy:         37,286.170550 kWh
+    First period:         2006-12-16 00:00:00
+    Last period:          2010-11-26 00:00:00
+    Minimum coverage:     0.0000%
+    Mean coverage:        98.7526%
+
+  MONTHLY
+    Intervals:            48
+    Complete intervals:   34
+    Incomplete intervals: 14
+    Empty intervals:      0
+    Expected minutes:     2,075,259
+    Valid minutes:        2,049,356
+    Imputed minutes:      76
+    Total energy:         37,286.170550 kWh
+    First period:         2006-12-01 00:00:00
+    Last period:          2010-11-01 00:00:00
+    Minimum coverage:     83.8127%
+    Mean coverage:        98.7717%
+
+Important interpretation:
+- A partial interval is a sum of its valid minutes only. Its
+  total_energy_consumption_kwh is not a complete-interval total.
+- is_complete is true only when valid_observation_count equals
+  expected_observation_count.
+- Empty intervals carry NaN energy totals, not zero.
+
+6. OUTPUT FILES
+------------------------------------------------------------------------------
+                                          File    Rows  Columns      Size
+data/processed/household_power_cleaned.parquet 2049356       18  26.95 MB
+ data/processed/household_power_hourly.parquet   34589       20   1.54 MB
+  data/processed/household_power_daily.parquet    1442       20 150.40 KB
+data/processed/household_power_monthly.parquet      48       20  20.00 KB
+
+Output details:
+  - data/processed/household_power_cleaned.parquet: 26.95 MB, SHA-256
+    6b662e4f2ddc3b069308e745f21516ee9e0a8a62b0346c45d788a085bc34ee22
+  - data/processed/household_power_hourly.parquet: 1.54 MB, SHA-256
+    2b8da2073ee90a88bdb94c24bad0786b3dab8b143c4e5d6850a63044e05f8a75
+  - data/processed/household_power_daily.parquet: 150.40 KB, SHA-256
+    8df351774de5c516187af92c2f57164fb0fc4d2b49b587ab6d29f3ca1ffd48a6
+  - data/processed/household_power_monthly.parquet: 20.00 KB, SHA-256
+    887fdea34b8767ba12dde88cf61df88e9a804c8208df894a8f108784c97521ae
+
+7. REPRODUCIBILITY
+------------------------------------------------------------------------------
+- The transformation is deterministic for the same cleaned input and range.
+- Derived columns are removed and recreated, so rerunning is safe.
+- Parquet files use PyArrow with Snappy compression and no DataFrame index.
+Transformation duration: 10.635 seconds
+Final status: SUCCESS
+==============================================================================

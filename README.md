@@ -7,10 +7,12 @@ combines data engineering, machine learning, and full-stack development on a
 fully inspectable local stack: no cloud hosting, no paid services, and no
 invented production data.
 
-> **Project status: Phase 2 - Dataset and EDA.**
-> The monorepo, interface, API health contract, database wiring, containers, and
-> CI are in place. Phase 2 adds the raw UCI dataset, inspection reports, and an
-> executed EDA notebook. Domain ingestion, models, and analytics views are
+> **Project status: Phase 3 - Data cleaning and transformation.**
+> The monorepo, interface, API health contract, database wiring, containers, CI,
+> raw dataset, inspection reports, and EDA are in place. Phase 3 adds a
+> reproducible cleaning and transformation ETL, four validated Parquet datasets,
+> five data-engineering reports, and an executed 20-section notebook. Domain
+> ingestion, models, forecasts, anomaly detection, and analytics views are
 > deliberately not implemented yet.
 
 ---
@@ -34,11 +36,11 @@ run, and verified by another developer.
 
 - No synthetic production data, sample dashboards, or placeholders that look
   like real measurements.
-- No ML predictions, anomaly scores, or model artefacts in this phase.
+- No ML predictions, anomaly scores, or model artefacts in Phases 1-3.
 - No cloud infrastructure, paid APIs, or live deployment.
 - No authentication or multi-user tenancy; this is a local single-user project.
-- No Airflow or Spark runtime in Phase 2. They are documented in the target
-  architecture and will be added with the data pipeline.
+- No Airflow or Spark runtime in Phase 3. They are documented in the target
+  architecture and will be added with the orchestration phase.
 
 ---
 
@@ -49,7 +51,7 @@ run, and verified by another developer.
 | Interface | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts | Product surface and future analytics views |
 | API | Python, FastAPI, Pydantic, SQLAlchemy 2 | Typed local service and health contract |
 | Database | PostgreSQL 17, Alembic | Durable storage and versioned schema |
-| Data engineering | Pandas, NumPy, PySpark, Apache Airflow | Ingestion, validation, transformation and orchestration |
+| Data engineering | Pandas, NumPy, PyArrow, Pandera, PySpark, Apache Airflow | Cleaning, validation, transformation and orchestration |
 | Machine learning | scikit-learn, Joblib | Forecasting and anomaly detection (later phases) |
 | Testing | Pytest, Ruff, ESLint, TypeScript | Backend tests and frontend quality gates |
 | Infrastructure | Docker, Docker Compose, GitHub Actions | Reproducible local runtime and CI |
@@ -91,9 +93,18 @@ Phase 2 adds:
 - Dataset inspection script and five generated reports in `reports/eda/`
 - Executed EDA notebook with ten saved figures (`reports/eda/figures/`)
 
-Still not implemented: automated dataset download, domain ingestion, schema
-domain models, Airflow DAGs, Spark jobs, trained models, forecasts, anomaly
-detection, and energy dashboards.
+Phase 3 adds:
+
+- Cleaning and transformation modules with a narrow five-minute interpolation
+  rule and explicit unresolved-gap accounting
+- Four Parquet datasets in `data/processed/`: minute, hourly, daily and monthly
+- Five reports in `reports/data-engineering/` and ten notebook figures
+- Pandera schemas, cross-aggregate checks and Parquet readback validation
+- An executed 20-section cleaning and transformation notebook
+
+Still not implemented: automated dataset download, domain ingestion into
+PostgreSQL, domain schema models, Airflow DAGs, Spark jobs, trained models,
+forecasts, anomaly detection, and energy dashboards.
 
 ---
 
@@ -104,14 +115,14 @@ EcoPulse-AI/
 ├── .github/workflows/ci.yml    CI: backend, frontend, Compose validation
 ├── .env.example                Docker Compose environment
 ├── airflow/
-│   └── dags/                   Reserved for Phase 2+ DAGs
+│   └── dags/                   Airflow DAGs (later phases)
 ├── backend/
 │   ├── alembic/                Migration environment and baseline revision
 │   ├── app/
 │   │   ├── api/v1/             Versioned HTTP routes
 │   │   ├── core/               Settings
 │   │   ├── db/                 SQLAlchemy engine, session, declarative base
-│   │   ├── models/             ORM models (empty until Phase 2)
+│   │   ├── models/             ORM models (empty until domain ingestion)
 │   │   ├── schemas/            Pydantic response models
 │   │   └── main.py             FastAPI application factory
 │   ├── tests/                  Pytest health-contract tests
@@ -122,8 +133,8 @@ EcoPulse-AI/
 │   ├── processed/              Derived datasets (ignored by Git)
 │   └── external/               Third-party reference data (ignored by Git)
 ├── data-engineering/
-│   ├── src/                    Future ingestion and transformation modules
-│   ├── notebooks/              Exploratory notebooks
+│   ├── src/                    Inspection, cleaning, transformation and ETL modules
+│   ├── notebooks/              Executed EDA and Phase 3 notebooks
 │   └── requirements.txt
 ├── database/
 │   ├── init/                   Future bootstrap SQL
@@ -143,6 +154,9 @@ EcoPulse-AI/
 │   ├── notebooks/
 │   ├── models/                 Local Joblib artefacts (ignored by Git)
 │   └── requirements.txt
+├── reports/
+│   ├── eda/                    Phase 2 inspection reports and figures
+│   └── data-engineering/       Phase 3 cleaning, validation and ETL reports
 ├── scripts/                    Reserved for repeatable operations
 ├── tests/                      Future cross-system tests
 └── docker-compose.yml
@@ -281,8 +295,10 @@ validated there and local builds are documented in
 
 The project uses real public datasets only. Phase 2 selects the UCI household
 dataset, records its source, licence and SHA-256 checksum, and profiles it before
-any data is ingested. Automated retrieval and the formal manifest are future
-work.
+any data is ingested. Phase 3 cleans and transforms it with documented rules:
+only short gaps are interpolated, long gaps are not zero-filled, and unresolved
+rows are excluded only from the final modelling dataset. Automated retrieval and
+the formal manifest are future work.
 
 - Raw data stays immutable in `data/raw/`.
 - Processed data is reproducible, never hand-edited.
@@ -322,6 +338,7 @@ Full tokens and usage rules are in
 - [Architecture](docs/architecture.md) - boundaries, runtime topology, decisions
 - [Development](docs/development.md) - verified versions, setup, troubleshooting
 - [Design system](docs/design-system.md) - visual identity and chart guidance
+- [Data engineering](data-engineering/README.md) - inspection, cleaning, ETL and notebooks
 - [Data directory](data/README.md) - dataset rules and directory contract
 - [Database](database/README.md) - schema ownership and migration workflow
 
@@ -329,10 +346,13 @@ Full tokens and usage rules are in
 
 ## Known limitations
 
-- Phase 2 only: no ingested domain data, domain tables, models, predictions, or
-  live energy charts. The raw dataset and EDA reports are local files.
+- Phases 1-3 only: no domain ingestion into PostgreSQL, domain tables, models,
+  predictions, or live energy charts. Raw data, processed Parquet files, reports
+  and figures are local files.
 - Airflow is not running natively or in Compose yet; it is container-only on
-  Windows and will arrive with the pipeline phase.
+  Windows and will arrive with the orchestration phase.
+- The processed datasets exclude unresolved long gaps; aggregate totals for
+  partial intervals therefore cover valid minutes only and are flagged.
 - The Docker images have not been exercised automatically in CI.
 - There is no authentication because the system is designed for local use only.
 - The frontend status panel shows infrastructure state only. It is deliberately
@@ -344,8 +364,8 @@ Full tokens and usage rules are in
 | --- | --- | --- |
 | 01 | Foundation: monorepo, UI shell, API, database wiring, containers, CI | Complete |
 | 02 | Dataset collection, inspection, EDA, reports and findings | Complete |
-| 03 | Data foundation: ingestion, schema, Airflow, Spark | Not started |
-| 04 | Intelligence: features, forecasts, anomaly detection, evaluation | Not started |
+| 03 | Cleaning, transformation, validation, ETL and Parquet outputs | Complete |
+| 04 | Intelligence: forecasts, anomaly detection and evaluation | Not started |
 | 05 | Experience: real-data dashboards, integration and end-to-end tests | Not started |
 
-Phase 2 is complete. Phase 3 and later remain intentionally unimplemented.
+Phases 1-3 are complete. Phase 4 and later remain intentionally unimplemented.

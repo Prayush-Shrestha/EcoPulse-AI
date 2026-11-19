@@ -7,13 +7,14 @@ combines data engineering, machine learning, and full-stack development on a
 fully inspectable local stack: no cloud hosting, no paid services, and no
 invented production data.
 
-> **Project status: Phase 3 - Data cleaning and transformation.**
+> **Project status: Phase 4 - Intelligence: forecasting and anomaly detection.**
 > The monorepo, interface, API health contract, database wiring, containers, CI,
-> raw dataset, inspection reports, and EDA are in place. Phase 3 adds a
-> reproducible cleaning and transformation ETL, four validated Parquet datasets,
-> five data-engineering reports, and an executed 20-section notebook. Domain
-> ingestion, models, forecasts, anomaly detection, and analytics views are
-> deliberately not implemented yet.
+> raw dataset, inspection reports, EDA, and the Phase 3 cleaning and
+> transformation ETL are in place. Phase 4 adds a reproducible, leakage-safe
+> hourly forecasting experiment, an unsupervised anomaly-detection experiment,
+> six machine-learning reports, twelve real figures, locally saved models, and
+> two executed notebooks. API serving, analytics dashboards, and cloud
+> deployment are deliberately not implemented yet.
 
 ---
 
@@ -36,7 +37,9 @@ run, and verified by another developer.
 
 - No synthetic production data, sample dashboards, or placeholders that look
   like real measurements.
-- No ML predictions, anomaly scores, or model artefacts in Phases 1-3.
+- No fabricated model metrics or anomaly labels. Phase 4 results are computed
+  from the real Phase 3 Parquet outputs, and anomaly detections are explicitly
+  unlabelled deviation candidates.
 - No cloud infrastructure, paid APIs, or live deployment.
 - No authentication or multi-user tenancy; this is a local single-user project.
 - No Airflow or Spark runtime in Phase 3. They are documented in the target
@@ -52,7 +55,7 @@ run, and verified by another developer.
 | API | Python, FastAPI, Pydantic, SQLAlchemy 2 | Typed local service and health contract |
 | Database | PostgreSQL 17, Alembic | Durable storage and versioned schema |
 | Data engineering | Pandas, NumPy, PyArrow, Pandera, PySpark, Apache Airflow | Cleaning, validation, transformation and orchestration |
-| Machine learning | scikit-learn, Joblib | Forecasting and anomaly detection (later phases) |
+| Machine learning | scikit-learn, Joblib | Hourly forecasting and unsupervised anomaly detection (Phase 4) |
 | Testing | Pytest, Ruff, ESLint, TypeScript | Backend tests and frontend quality gates |
 | Infrastructure | Docker, Docker Compose, GitHub Actions | Reproducible local runtime and CI |
 
@@ -102,9 +105,21 @@ Phase 3 adds:
 - Pandera schemas, cross-aggregate checks and Parquet readback validation
 - An executed 20-section cleaning and transformation notebook
 
+Phase 4 adds:
+
+- Phase 3 Parquet inputs that are validated before any training or scoring
+- A chronological 70/15/15 hourly forecasting experiment with five candidates,
+  validation-only model selection, and a one-time test evaluation
+- A leakage-safe 24-feature pipeline and a saved Random Forest bundle that
+  reproduces its stored test predictions
+- A train-only Isolation Forest plus a causal rolling z-score baseline, with no
+  supervised accuracy claims
+- Six reports and twelve figures in `reports/machine-learning/`
+- Two executed notebooks covering forecasting and anomaly detection
+
 Still not implemented: automated dataset download, domain ingestion into
-PostgreSQL, domain schema models, Airflow DAGs, Spark jobs, trained models,
-forecasts, anomaly detection, and energy dashboards.
+PostgreSQL, domain schema models, Airflow DAGs, Spark jobs, API serving of
+forecasts or anomaly scores, and energy dashboards.
 
 ---
 
@@ -134,7 +149,7 @@ EcoPulse-AI/
 │   └── external/               Third-party reference data (ignored by Git)
 ├── data-engineering/
 │   ├── src/                    Inspection, cleaning, transformation and ETL modules
-│   ├── notebooks/              Executed EDA and Phase 3 notebooks
+│   ├── notebooks/              Executed Phase 2-4 notebooks
 │   └── requirements.txt
 ├── database/
 │   ├── init/                   Future bootstrap SQL
@@ -150,13 +165,14 @@ EcoPulse-AI/
 │   ├── Dockerfile
 │   └── package.json
 ├── machine-learning/
-│   ├── src/                    Future training and evaluation modules
-│   ├── notebooks/
-│   ├── models/                 Local Joblib artefacts (ignored by Git)
+│   ├── src/                    Phase 4 preparation, training and evaluation scripts
+│   ├── utils/                  Shared features, metrics and validation
+│   ├── models/                 Local Joblib artefacts; JSON metadata is committed
 │   └── requirements.txt
 ├── reports/
 │   ├── eda/                    Phase 2 inspection reports and figures
-│   └── data-engineering/       Phase 3 cleaning, validation and ETL reports
+│   ├── data-engineering/       Phase 3 cleaning, validation and ETL reports
+│   └── machine-learning/       Phase 4 metrics, reports and twelve figures
 ├── scripts/                    Reserved for repeatable operations
 ├── tests/                      Future cross-system tests
 └── docker-compose.yml
@@ -230,6 +246,27 @@ Open http://localhost:3000. The status panel queries the real API health
 endpoint; when PostgreSQL is unavailable it reports a degraded state instead of
 inventing a successful one.
 
+### Option C - Phase 4 machine-learning pipeline
+
+The four Phase 3 Parquet outputs must exist in `data/processed/`. Use the
+dedicated ML environment; do not install these packages into the backend:
+
+```powershell
+cd D:\ai\EcoPulse-AI\machine-learning
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+cd D:\ai\EcoPulse-AI
+machine-learning\.venv\Scripts\python.exe machine-learning\src\06_run_ml_pipeline.py
+```
+
+The pipeline validates the Phase 3 inputs, prepares both leakage-safe datasets,
+trains and evaluates five forecasting candidates, fits the unsupervised anomaly
+detectors, reloads both saved models, and writes six reports plus twelve figures.
+The verified local run completed in about 163 seconds with 128/128 checks passed.
+See [machine-learning/README.md](machine-learning/README.md) for the data
+contract, results and notebook commands.
+
 ---
 
 ## Environment variables
@@ -272,6 +309,9 @@ npm run build
 # Compose configuration
 cd D:\ai\EcoPulse-AI
 docker compose --env-file .env.example config --quiet
+
+# Phase 4 machine-learning pipeline and artefact verification
+machine-learning\.venv\Scripts\python.exe machine-learning\src\06_run_ml_pipeline.py
 ```
 
 GitHub Actions runs the same quality gates, including migrations against a real
@@ -297,13 +337,15 @@ The project uses real public datasets only. Phase 2 selects the UCI household
 dataset, records its source, licence and SHA-256 checksum, and profiles it before
 any data is ingested. Phase 3 cleans and transforms it with documented rules:
 only short gaps are interpolated, long gaps are not zero-filled, and unresolved
-rows are excluded only from the final modelling dataset. Automated retrieval and
-the formal manifest are future work.
+rows are excluded only from the final modelling dataset. Phase 4 reads those
+Parquet files directly, validates them again, and preserves the same rules when
+building features. Automated retrieval and the formal manifest are future work.
 
 - Raw data stays immutable in `data/raw/`.
 - Processed data is reproducible, never hand-edited.
 - No chart is populated with invented values.
 - Model quality is reported against a baseline with chronological evaluation.
+- Unsupervised detections are labelled as candidates, never as confirmed faults.
 
 See [data/README.md](data/README.md) and
 [docs/architecture.md](docs/architecture.md#data-principles).
@@ -339,6 +381,7 @@ Full tokens and usage rules are in
 - [Development](docs/development.md) - verified versions, setup, troubleshooting
 - [Design system](docs/design-system.md) - visual identity and chart guidance
 - [Data engineering](data-engineering/README.md) - inspection, cleaning, ETL and notebooks
+- [Machine learning](machine-learning/README.md) - Phase 4 forecasting, anomaly detection and verification
 - [Data directory](data/README.md) - dataset rules and directory contract
 - [Database](database/README.md) - schema ownership and migration workflow
 
@@ -346,9 +389,15 @@ Full tokens and usage rules are in
 
 ## Known limitations
 
-- Phases 1-3 only: no domain ingestion into PostgreSQL, domain tables, models,
-  predictions, or live energy charts. Raw data, processed Parquet files, reports
-  and figures are local files.
+- Phases 1-4 only: no domain ingestion into PostgreSQL, no API serving of
+  forecasts or anomaly scores, and no live energy charts. Raw data, processed
+  Parquet files, model binaries, reports and figures are local files.
+- Forecasting is one household and one chronological hold-out. It is not a
+  cross-household generalisation claim, and recursive multi-day forecasting was
+  not evaluated.
+- The anomaly experiment has no reliable labels, so accuracy, precision, recall
+  and F1 are not reported. Flagged minutes are statistical deviations for
+  investigation, not confirmed faults.
 - Airflow is not running natively or in Compose yet; it is container-only on
   Windows and will arrive with the orchestration phase.
 - The processed datasets exclude unresolved long gaps; aggregate totals for
@@ -365,7 +414,7 @@ Full tokens and usage rules are in
 | 01 | Foundation: monorepo, UI shell, API, database wiring, containers, CI | Complete |
 | 02 | Dataset collection, inspection, EDA, reports and findings | Complete |
 | 03 | Cleaning, transformation, validation, ETL and Parquet outputs | Complete |
-| 04 | Intelligence: forecasts, anomaly detection and evaluation | Not started |
+| 04 | Intelligence: hourly forecasting, anomaly detection and evaluation | Complete |
 | 05 | Experience: real-data dashboards, integration and end-to-end tests | Not started |
 
-Phases 1-3 are complete. Phase 4 and later remain intentionally unimplemented.
+Phases 1-4 are complete. Phase 5 remains intentionally unimplemented.

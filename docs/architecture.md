@@ -4,7 +4,7 @@ EcoPulse AI is a local-first energy intelligence system. This document describes
 the boundaries that matter now, the target data path, and the decisions that
 keep later phases maintainable.
 
-**Document status:** Phases 1-3 implemented, later phases planned.
+**Document status:** Phases 1-4 implemented, later phases planned.
 
 ---
 
@@ -65,6 +65,21 @@ flowchart LR
     API -->|"OpenAPI"| DOCS["/docs"]
 ```
 
+The Phase 4 machine-learning subset is a local batch path that reads Parquet
+files directly instead of querying PostgreSQL:
+
+```mermaid
+flowchart LR
+    PQ[("Phase 3 Parquet<br/>minute + hourly")] --> PREP["Leakage-safe dataset<br/>preparation"]
+    PREP --> TRAIN["Chronological training<br/>5 forecast candidates"]
+    TRAIN --> EVAL["Validation selection<br/>one-time test"]
+    EVAL --> MODEL[("Joblib bundle<br/>+ JSON metadata")]
+    PREP --> DETECT["Train-only scaler<br/>+ Isolation Forest"]
+    DETECT --> SCORE["Unsupervised scores<br/>+ rolling z-score"]
+    MODEL --> REP["6 reports<br/>12 figures"]
+    SCORE --> REP
+```
+
 ---
 
 ## 3. Runtime topologies
@@ -89,7 +104,8 @@ availability separately.
 - Frontend: `next dev` on the host.
 - Backend: Uvicorn with reload on the host.
 - Database: PostgreSQL container or a local PostgreSQL 17 installation.
-- Airflow/Spark: not started in Phase 1.
+- Machine learning: a dedicated `machine-learning/.venv`, run as a batch pipeline.
+- Airflow/Spark: not started in any phase yet.
 
 This mode is the fastest feedback loop and is documented in
 [development.md](development.md).
@@ -216,6 +232,37 @@ volume or batch semantics justify it, not merely to satisfy a technology list.
 - Evaluation uses chronological splits; random splits are not acceptable for
   time-series forecasting.
 
+### Phase 4 machine-learning implementation
+
+Phase 4 keeps the same principles but runs as a local batch process over the
+Phase 3 Parquet outputs. PostgreSQL ingestion is still future work, so the
+machine-learning layer has no database dependency.
+
+- **Inputs:** revalidated `household_power_cleaned.parquet` and
+  `household_power_hourly.parquet`. Raw files and Phase 3 outputs are never
+  modified.
+- **Forecasting target:** `total_energy_consumption_kwh` for complete clock-hours
+  only. Incomplete hours keep a missing target; they are never treated as zero.
+- **Forecasting features:** 24 calendar, cyclical, lag and rolling features. Every
+  lag and rolling statistic is shifted by one hour, and feature warm-up is
+  excluded before splits are assigned.
+- **Split policy:** chronological 70/15/15. Validation RMSE selects the model;
+  the test split is predicted once after selection and never reused for tuning.
+- **Candidates:** lag-1 persistence, 24-hour seasonal persistence, Linear
+  Regression, Random Forest and HistGradientBoosting.
+- **Saved artefact:** only the selected model, wrapped with its feature names and
+  metadata. The Joblib binary stays local; JSON metadata and feature definitions
+  are committed.
+- **Anomaly inputs:** cleaned minute rows, excluding the 76 interpolated rows and
+  rows without a complete prior 24-hour baseline.
+- **Anomaly methods:** a causal rolling z-score baseline and an Isolation Forest
+  fitted on the training split only, including a train-only scaler.
+- **Honesty constraint:** no reliable anomaly labels exist, so accuracy,
+  precision, recall and F1 are not reported. Detections are deviation candidates.
+- **Outputs:** six reports, twelve figures, prepared datasets, predictions and
+  training summaries under `data/processed/ml/`. Prepared outputs are ignored by
+  Git and reproducible from the committed code.
+
 ### Dataset shortlist
 
 | Source | Data | Access |
@@ -224,7 +271,8 @@ volume or batch semantics justify it, not merely to satisfy a technology list.
 | ENTSO-E Transparency Platform | European load, generation, and exchange data | Free account / API |
 | U.S. EIA Open Data | Regional electricity demand and generation | Free API key |
 
-Selection, licence review, and retrieval tooling are Phase 2 work.
+The UCI household dataset was selected and inspected in Phase 2 and cleaned in
+Phase 3. Automated retrieval and a formal source manifest are still future work.
 
 ---
 
@@ -284,23 +332,29 @@ rate limiting, and dependency scanning must be designed first.
 | Empty initial Alembic baseline | Establishes migration history without inventing a premature schema. |
 | Live infrastructure status instead of fake metrics | Demonstrates the stack honestly before data exists. |
 | No authentication in Phase 1 | Local single-user project; avoid a false sense of security. |
+| Chronological 70/15/15 splits with validation-only selection | Prevents temporal leakage and test-set reuse in both Phase 4 experiments. |
+| One-hour forecast horizon from causal lags | Matches the available resolution; recursive multi-day forecasting was not validated. |
+| Unsupervised anomaly detection without accuracy claims | No reliable labels exist, so detections are framed as investigation candidates. |
 
 ---
 
 ## 12. Phase boundary
 
-Phases 1-3 end at a runnable foundation and a reproducible local data pipeline:
+Phases 1-4 end at a runnable foundation, a reproducible local data pipeline and a
+local intelligence layer:
 
 - Phase 1: monorepo, API, database wiring, frontend shell, containers and CI.
 - Phase 2: raw dataset inspection, EDA, reports and figures.
 - Phase 3: deterministic cleaning, feature engineering, gap-aware aggregation,
   validation and four Parquet outputs.
+- Phase 4: leakage-safe hourly forecasting, unsupervised anomaly detection,
+  saved local models, six reports, twelve figures and two executed notebooks.
 
 The project still deliberately does **not** include:
 
 - domain ingestion into PostgreSQL or energy domain tables,
 - Airflow DAGs or Spark jobs,
-- model training, forecasts or anomaly scores,
+- API serving of forecasts or anomaly scores,
 - consumption dashboards,
 - cloud deployment.
 

@@ -4,19 +4,25 @@ Ingestion, cleaning, validation, transformation and exploratory analysis code
 lives here. Phases 2 and 3 implement the UCI Individual Household Electric Power
 Consumption workflow: inspection and EDA (Phase 2), then deterministic cleaning,
 feature engineering, gap-aware aggregation, validation and Parquet outputs
-(Phase 3). No model training, forecasting, anomaly detection, dashboard work or
-Phase 4 work is included.
+(Phase 3). The Phase 4 forecasting and anomaly-detection code lives in
+`../machine-learning/`, while its two executed notebooks are stored here with the
+other project notebooks. No Phase 5 dashboard work is included.
 
 ## Boundaries
 
 - `src/` - numbered production scripts for inspection, cleaning, transformation
   and ETL orchestration.
-- `notebooks/` - executed analysis notebooks. Production logic stays in `src/`.
+- `notebooks/` - executed analysis notebooks for Phases 2-4. Production logic for
+  cleaning stays in `src/`; Phase 4 model code stays in `../machine-learning/src/`.
 - `../reports/eda/` - Phase 2 inspection reports and EDA figures.
 - `../reports/data-engineering/` - Phase 3 cleaning, transformation, validation
   and ETL reports, plus notebook figures.
+- `../reports/machine-learning/` - Phase 4 forecasting and anomaly-detection
+  reports, metrics and figures.
 - `../data/processed/` - generated Parquet datasets. They are ignored by Git and
   can be rebuilt from the immutable raw file.
+- `../data/processed/ml/` - Phase 4 prepared datasets and predictions, also
+  reproducible and ignored by Git.
 - Airflow DAGs live in `../airflow/dags/`.
 - Raw and processed data live in `../data/` and is never committed.
 
@@ -31,7 +37,7 @@ py -3.13 -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-PySpark requires Java 17 and is not needed for Phases 2-3. To install only the
+PySpark requires Java 17 and is not needed for Phases 2-4. To install only the
 inspection, cleaning, validation and notebook toolchain:
 
 ```powershell
@@ -169,11 +175,49 @@ outliers, domain checks, schema verification, datetime features, energy,
 hourly/daily/monthly aggregation, Pandera validation and findings. It saves ten
 figures to `reports/data-engineering/figures/` and embeds the executed outputs.
 
+## Phase 4 notebooks
+
+The Phase 4 notebooks document the experiments implemented in
+`../machine-learning/`:
+
+- `03_energy_forecasting.ipynb` - data contract, causal features, validation
+  selection, one-time test results, saved-model reload and six figures.
+- `04_anomaly_detection.ipynb` - cleaned-minute exclusions, methods, detection
+  counts, method agreement, saved-model reload and six figures.
+
+They read the artefacts written by the machine-learning pipeline and do not
+retrain anything. Run the pipeline first:
+
+```powershell
+cd D:\ai\EcoPulse-AI
+machine-learning\.venv\Scripts\python.exe machine-learning\src\06_run_ml_pipeline.py
+```
+
+The notebooks need the dedicated ML environment and its `ecopulse-ml` kernel;
+the data-engineering environment does not contain scikit-learn:
+
+```powershell
+machine-learning\.venv\Scripts\python.exe -m ipykernel install `
+  --prefix machine-learning\.venv --name ecopulse-ml `
+  --display-name "EcoPulse ML (Python 3.13)"
+
+$env:JUPYTER_PATH = "$PWD\machine-learning\.venv\share\jupyter"
+machine-learning\.venv\Scripts\python.exe -m nbconvert --to notebook --execute `
+  --inplace --ExecutePreprocessor.timeout=900 `
+  --ExecutePreprocessor.kernel_name=ecopulse-ml `
+  data-engineering\notebooks\03_energy_forecasting.ipynb
+```
+
+Repeat the last command for `04_anomaly_detection.ipynb`. Full results and
+verification details are in `../machine-learning/README.md`.
+
 ## Phase status
 
 - Phase 1: monorepo, API, database, frontend, Compose and CI.
 - Phase 2: raw dataset inspection, five reports, EDA notebook and ten figures.
 - Phase 3: cleaning, transformation, validation, ETL orchestration, four Parquet
   datasets, five reports and an executed 20-section notebook.
-- Phase 4 and later: database ingestion, Airflow/Spark jobs, forecasting,
-  anomaly detection and analytics views.
+- Phase 4: leakage-safe hourly forecasting, unsupervised anomaly detection,
+  saved local models, six reports, twelve figures and two executed notebooks.
+- Phase 5 and later: database ingestion, API serving, Airflow/Spark jobs and
+  analytics views.

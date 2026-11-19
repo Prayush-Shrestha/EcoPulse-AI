@@ -1,0 +1,16 @@
+model,split,n,excluded_non_finite,mae,rmse,r2,mape_pct,smape_pct,max_error,mape_valid_points,zero_actuals,mape_note
+Naive (lag 1),train,22015,0,0.449558,0.700835,0.435131,49.197247,39.717970,4.563033,22015,0,valid: all actual values are non-zero
+Seasonal Naive (lag 24),train,22015,0,0.660035,0.986541,-0.119301,85.674530,56.180357,6.037033,22015,0,valid: all actual values are non-zero
+Linear Regression,train,22015,0,0.417753,0.600717,0.584993,56.621952,41.907099,3.940683,22015,0,valid: all actual values are non-zero
+Random Forest,train,22015,0,0.168995,0.259540,0.922531,21.686484,18.344612,2.024718,22015,0,valid: all actual values are non-zero
+HistGradientBoosting,train,22015,0,0.291091,0.426097,0.791199,37.845438,30.422023,2.822269,22015,0,valid: all actual values are non-zero
+Naive (lag 1),validation,4717,0,0.465920,0.692700,0.394093,45.054965,37.802112,3.840433,4717,0,valid: all actual values are non-zero
+Seasonal Naive (lag 24),validation,4717,0,0.672260,0.967156,-0.181158,76.409195,52.910703,4.295200,4717,0,valid: all actual values are non-zero
+Linear Regression,validation,4717,0,0.420723,0.585355,0.567333,48.712154,37.299539,3.682284,4717,0,valid: all actual values are non-zero
+Random Forest,validation,4717,0,0.373628,0.538968,0.633190,40.868326,31.954804,3.514756,4717,0,valid: all actual values are non-zero
+HistGradientBoosting,validation,4717,0,0.377597,0.545350,0.624452,40.901046,32.074337,3.494091,4717,0,valid: all actual values are non-zero
+Naive (lag 1),test,4719,0,0.384451,0.582838,0.321521,46.321835,38.619280,3.831533,4719,0,valid: all actual values are non-zero
+Seasonal Naive (lag 24),test,4719,0,0.511242,0.759183,-0.151156,67.348031,49.348127,5.175700,4719,0,valid: all actual values are non-zero
+Linear Regression,test,4719,0,0.354011,0.498639,0.503393,48.321581,38.431979,3.766990,4719,0,valid: all actual values are non-zero
+Random Forest,test,4719,0,0.319351,0.462580,0.572619,43.729641,34.163138,3.624067,4719,0,valid: all actual values are non-zero
+HistGradientBoosting,test,4719,0,0.320763,0.465260,0.567653,43.759753,34.428912,3.270460,4719,0,valid: all actual values are non-zero

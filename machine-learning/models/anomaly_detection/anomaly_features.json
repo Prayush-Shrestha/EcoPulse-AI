@@ -1,0 +1,55 @@
+{
+  "features": [
+    "Global_active_power",
+    "Global_reactive_power",
+    "Voltage",
+    "Global_intensity",
+    "Sub_metering_1",
+    "Sub_metering_2",
+    "Sub_metering_3",
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "gap_lag_1",
+    "gap_mean_60",
+    "gap_std_60",
+    "gap_mean_1440",
+    "gap_std_1440",
+    "gap_z_24h"
+  ],
+  "feature_groups": {
+    "measurements": [
+      "Global_active_power",
+      "Global_reactive_power",
+      "Voltage",
+      "Global_intensity",
+      "Sub_metering_1",
+      "Sub_metering_2",
+      "Sub_metering_3"
+    ],
+    "calendar": [
+      "hour",
+      "day_of_week",
+      "is_weekend",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos"
+    ],
+    "historical": [
+      "gap_lag_1",
+      "gap_mean_60",
+      "gap_std_60",
+      "gap_mean_1440",
+      "gap_std_1440",
+      "gap_z_24h"
+    ]
+  },
+  "causality": "The 60-minute and 24-hour statistics use values shifted by one minute; the current reading is never part of its own baseline or z-score.",
+  "generated_at_utc": "2026-11-19T06:36:43.710812+00:00",
+  "model_version": "1.0.0"
+}

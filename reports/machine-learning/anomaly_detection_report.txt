@@ -1,0 +1,147 @@
+==============================================================================
+ECOPULSE AI - PHASE 4 ANOMALY DETECTION REPORT
+==============================================================================
+Generated (UTC): 2026-11-19T06:37:12.573962+00:00
+Dataset: Individual Household Electric Power Consumption
+Scope: unsupervised anomaly detection only; no labelled accuracy is claimed.
+
+1. DATASET USED
+------------------------------------------------------------------------------
+Source:                    data\processed\ml\anomaly_dataset.parquet
+Cleaned minute observations: 2,049,356
+Excluded before scoring:    76 imputed rows + 5,983 warm-up/gap rows
+Usable minute observations: 2,043,373
+Training rows:             1,430,361 (2006-12-17T05:24:00 -> 2009-09-12T22:18:00)
+Validation rows:           306,505 (2009-09-12T22:19:00 -> 2010-04-18T08:49:00)
+Test rows:                 306,507 (2010-04-18T08:50:00 -> 2010-11-26T21:02:00)
+Exclusions:                interpolated minutes and rows without a full prior 24-hour baseline
+
+2. FEATURES
+------------------------------------------------------------------------------
+Measurements Global_active_power, Global_reactive_power, Voltage, Global_intensity, Sub_metering_1, Sub_metering_2, Sub_metering_3
+Calendar     hour, day_of_week, is_weekend, hour_sin, hour_cos, dow_sin, dow_cos
+Historical   gap_lag_1, gap_mean_60, gap_std_60, gap_mean_1440, gap_std_1440, gap_z_24h
+Causality: The 60-minute and 24-hour statistics use values shifted by one minute; the current reading is never part of its own baseline or z-score.
+
+3. DETECTION METHODS
+------------------------------------------------------------------------------
+A. Rolling z-score baseline
+   |Global_active_power(t) - mean(previous 24h)| / std(previous 24h) >= 3.0
+   The mean and standard deviation are shifted by one minute, use at least 720 prior observations, and require no model fitting.
+
+B. Isolation Forest
+   200 trees, max_samples=256, contamination=0.50%, random_state=42
+   StandardScaler and the forest are fitted on the training split only. The offset is derived from training scores.
+   Training decision quantile at 0.5%: 0.000000 (0 by construction)
+   Decision threshold:                 0.000000
+   Raw-score offset (offset_):         -0.667777
+   Contamination rationale: 0.5% was chosen a priori to surface roughly ten thousand candidate minutes across about two million observations: enough for investigation without declaring a large share of normal consumption anomalous. It is not an estimate of the unknown true fault rate.
+
+4. DETECTION COUNTS
+------------------------------------------------------------------------------
+Method                                     Total   Flagged   Percent
+------------------------------------------------------------------------------
+Rolling z-score (|z| >= 3.0)           2,043,373    45,325    2.218%
+Isolation Forest (contamination=0.005) 2,043,373     8,809    0.431%
+
+Method                                   Train %     Val %    Test %
+------------------------------------------------------------------------------
+Rolling z-score (|z| >= 3.0)              2.356%    1.913%    1.882%
+Isolation Forest (contamination=0.005)    0.500%    0.420%    0.121%
+Note: Isolation Forest train flags are in-sample and are not comparable to validation/test detection rates.
+
+5. METHOD AGREEMENT
+------------------------------------------------------------------------------
+Flagged by both methods:       6,291
+Flagged by Isolation Forest only: 2,518
+Flagged by rolling z-score only:  39,034
+Flagged by neither method:     1,995,530
+Jaccard overlap:               13.15%
+Share of Isolation Forest flags also flagged by z-score: 71.42%
+Share of z-score flags also flagged by Isolation Forest: 13.88%
+Pearson correlation (IF score vs z-score): -0.7440
+
+6. TEMPORAL AND DAILY PATTERNS
+------------------------------------------------------------------------------
+Highest Isolation Forest month: 2007-12 | 672 flags | 1.505%
+Highest z-score month:          2008-08 | 1,786 flags | 4.001%
+Highest Isolation Forest hour:  20:00 | 1.461% of minutes
+Highest z-score hour:           20:00 | 6.166% of minutes
+
+7. EXAMPLE HIGH-SCORE OBSERVATIONS (investigation candidates)
+------------------------------------------------------------------------------
+Isolation Forest lowest decision scores:
+Timestamp           Split          GAP kW  Voltage V  z-score   IF score
+2007-12-23 19:33:00 train           8.288     232.45    3.908    -0.0785
+2007-12-23 19:32:00 train           8.262     233.12    3.915    -0.0782
+2007-12-23 19:31:00 train           8.186     232.26    3.892    -0.0780
+2007-12-23 19:34:00 train           8.634     231.96    4.094    -0.0752
+2007-02-03 19:23:00 train           7.848     229.23    3.905    -0.0747
+
+Largest absolute rolling z-scores:
+Timestamp           Split          GAP kW  Voltage V  z-score   IF score
+2007-10-30 13:37:00 train           7.836     231.72   14.397    -0.0271
+2008-04-29 10:37:00 train           4.946     232.71   13.677    -0.0079
+2007-10-30 13:38:00 train           7.920     232.17   13.605    -0.0382
+2008-08-31 14:20:00 train           2.656     235.22   13.435     0.0753
+2009-07-28 12:33:00 train           5.340     236.70   13.339    -0.0024
+
+These are the most extreme scored minutes, not confirmed equipment faults.
+
+8. KEY OBSERVATIONS
+------------------------------------------------------------------------------
+- The rolling z-score flagged 45,325 minutes (2.218%), while the Isolation Forest flagged 8,809 (0.431%).
+- The methods agree on 6,291 minutes (Jaccard 13.15%), which is expected because they model different notions of deviation.
+- The z-score is univariate on active power; the Isolation Forest also uses voltage, reactive power, intensity, sub-metering and calendar context.
+- Detection percentages differ across splits; this reflects changing household behaviour over four years as well as the train-only threshold.
+
+9. LIMITATIONS
+------------------------------------------------------------------------------
+- No reliable ground-truth anomaly labels exist. Accuracy, precision,
+  recall and F1 are therefore not reported and would be fabricated.
+- Detected observations are deviation candidates, not confirmed faults.
+  A high reading can be normal behaviour; a fault can produce a normal
+  reading.
+- The Isolation Forest contamination setting is a prior assumption, not an
+  estimated fault prevalence.
+- The rolling z-score assumes approximate local stability and is sensitive
+  to autocorrelation and heavy tails; the fixed 3.0 threshold is a
+  convention, not a calibrated probability.
+- Interpolated minutes were excluded, and long missing intervals are absent
+  from the source, so gap-adjacent behaviour is under-represented.
+- No weather, occupancy, appliance identity or tariff context is available.
+- Anomaly scores measure statistical deviation from learned patterns, not physical causation or fault severity.
+
+10. FIGURES AND ARTEFACTS
+------------------------------------------------------------------------------
+Summary CSV:    reports\machine-learning\anomaly_summary.csv
+Model:          machine-learning\models\anomaly_detection\isolation_forest.joblib
+Scaler:         machine-learning\models\anomaly_detection\anomaly_scaler.joblib
+Metadata:       machine-learning\models\anomaly_detection\anomaly_metadata.json
+Feature list:   machine-learning\models\anomaly_detection\anomaly_features.json
+Figure:         reports\machine-learning\figures\anomaly_consumption_timeline.png
+Figure:         reports\machine-learning\figures\anomaly_distribution_over_time.png
+Figure:         reports\machine-learning\figures\anomaly_score_distribution.png
+Figure:         reports\machine-learning\figures\anomaly_method_comparison.png
+Figure:         reports\machine-learning\figures\anomaly_hourly_profile.png
+Figure:         reports\machine-learning\figures\anomaly_normal_vs_anomalous.png
+
+11. VERIFICATION
+------------------------------------------------------------------------------
+- Saved scaler and Isolation Forest reloaded and reproduced flags on a 25,000-row test sample.
+- Rolling z-score flags were recomputed from stored z-scores and matched.
+- Counts in the training summary were reconciled with the prediction table.
+[PASS] MODEL ARTEFACT anomaly model exists: isolation_forest.joblib (751,353 bytes)
+[PASS] MODEL ARTEFACT anomaly scaler exists: anomaly_scaler.joblib (929 bytes)
+[PASS] MODEL ARTEFACT anomaly metadata exists: anomaly_metadata.json (5,017 bytes)
+[PASS] MODEL ARTEFACT anomaly feature list exists: anomaly_features.json (1,229 bytes)
+[PASS] MODEL ARTEFACT anomaly bundle structure: bundle contains model, scaler and threshold
+[PASS] MODEL ARTEFACT anomaly feature list matches training: 20 features
+[PASS] MODEL ARTEFACT threshold stored with model: offset -0.667777
+[PASS] MODEL ARTEFACT anomaly feature source is available: prepared dataset supplies the model features
+[PASS] MODEL ARTEFACT features join to anomaly test rows: 0 rows without model features
+[PASS] MODEL ARTEFACT anomaly evaluation sample: 25,000 test rows
+[PASS] MODEL ARTEFACT reloaded Isolation Forest reproduces flags: 0 mismatches in 25,000 rows
+[PASS] MODEL ARTEFACT z-score threshold reproduces flags: 0 mismatches in 25,000 rows
+
+Final anomaly evaluation status: PASSED

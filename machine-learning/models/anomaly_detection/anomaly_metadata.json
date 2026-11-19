@@ -1,0 +1,158 @@
+{
+  "model_name": "Isolation Forest",
+  "model_version": "1.0.0",
+  "model_type": "IsolationForest",
+  "training_date_utc": "2026-11-19T06:36:43.710812+00:00",
+  "dataset": "data\\processed\\ml\\anomaly_dataset.parquet",
+  "dataset_sha256": "536a758b6150b8ea916d22457844209a04f9f0ce3c16842f274b04b8dd42cb07",
+  "source": {
+    "cleaned_minutes": 2049356,
+    "imputed_rows_excluded": 76,
+    "warmup_or_gap_rows_excluded": 5983,
+    "usable_minutes": 2043373
+  },
+  "feature_names": [
+    "Global_active_power",
+    "Global_reactive_power",
+    "Voltage",
+    "Global_intensity",
+    "Sub_metering_1",
+    "Sub_metering_2",
+    "Sub_metering_3",
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "gap_lag_1",
+    "gap_mean_60",
+    "gap_std_60",
+    "gap_mean_1440",
+    "gap_std_1440",
+    "gap_z_24h"
+  ],
+  "feature_count": 20,
+  "training_period": {
+    "start": "2006-12-17T05:24:00",
+    "end": "2009-09-12T22:18:00",
+    "rows": 1430361
+  },
+  "validation_period": {
+    "start": "2009-09-12T22:19:00",
+    "end": "2010-04-18T08:49:00",
+    "rows": 306505
+  },
+  "test_period": {
+    "start": "2010-04-18T08:50:00",
+    "end": "2010-11-26T21:02:00",
+    "rows": 306507
+  },
+  "algorithm": "sklearn.ensemble.IsolationForest",
+  "contamination": 0.005,
+  "contamination_rationale": "0.5% was chosen a priori to surface roughly ten thousand candidate minutes across about two million observations: enough for investigation without declaring a large share of normal consumption anomalous. It is not an estimate of the unknown true fault rate.",
+  "isolation_forest": {
+    "n_estimators": 200,
+    "max_samples": 256,
+    "random_state": 42,
+    "iforest_offset": -0.6677766878861168,
+    "decision_threshold": 0.0,
+    "training_decision_quantile_0_005": 0.0,
+    "score_interpretation": "decision_function output; lower values are more anomalous. The decision threshold is 0.0; offset_ is the raw score_samples threshold used to centre the decision function."
+  },
+  "preprocessing": {
+    "scaler": "StandardScaler",
+    "fitted_on": "training split only",
+    "means": [
+      1.0859803715379273,
+      0.12076287896199656,
+      240.48859130250756,
+      4.6165809913666,
+      1.1465525136661305,
+      1.369271813199605,
+      6.060560935316329,
+      11.503160390978222,
+      2.9939658589684703,
+      0.28336412975465636,
+      -0.00017295432037370327,
+      -6.147762720991084e-06,
+      0.0035996399768413218,
+      -0.001893570531669305,
+      1.0859789117668124,
+      1.0859849451604717,
+      0.4049196782125412,
+      1.0862923104577282,
+      0.9367582561397595,
+      0.013164545317573509
+    ],
+    "scales": [
+      1.090527788662158,
+      0.11096981425322776,
+      3.2922625600394135,
+      4.587681575636048,
+      6.252733909497595,
+      6.067802922648146,
+      8.268130292162502,
+      6.922333942384966,
+      1.9957954027855216,
+      0.4506316674658391,
+      0.7070866531373596,
+      0.7071268707467537,
+      0.7070842838445845,
+      0.7071175727477682,
+      1.0905245950178213,
+      0.9306587655115066,
+      0.39875727240193587,
+      0.4543416581824384,
+      0.32517141820670437,
+      1.0822310213008273
+    ]
+  },
+  "zscore_baseline": {
+    "threshold": 3.0,
+    "method": "absolute deviation from the previous 24-hour rolling mean divided by the previous 24-hour rolling standard deviation",
+    "minimum_history_minutes": 720,
+    "note": "The z-score baseline uses Global_active_power only and assumes an approximately stable local distribution; it is not a fault detector."
+  },
+  "detection_counts": {
+    "overall_rows": 2043373,
+    "iforest_anomalies": 8809,
+    "iforest_percentage": 0.4311009296883144,
+    "zscore_anomalies": 45325,
+    "zscore_percentage": 2.218146173018827,
+    "by_split": [
+      {
+        "split": "train",
+        "rows": 1430361,
+        "iforest_anomalies": 7152,
+        "iforest_percentage": 0.5000136329220386,
+        "zscore_anomalies": 33693,
+        "zscore_percentage": 2.3555591910014324
+      },
+      {
+        "split": "validation",
+        "rows": 306505,
+        "iforest_anomalies": 1286,
+        "iforest_percentage": 0.41956901192476465,
+        "zscore_anomalies": 5863,
+        "zscore_percentage": 1.91285623399292
+      },
+      {
+        "split": "test",
+        "rows": 306507,
+        "iforest_anomalies": 371,
+        "iforest_percentage": 0.12104128127579468,
+        "zscore_anomalies": 5769,
+        "zscore_percentage": 1.882175610997465
+      }
+    ]
+  },
+  "label_status": "No reliable ground-truth anomaly labels exist. Detected observations are deviation candidates, not confirmed faults; accuracy, precision, recall and F1 are intentionally not reported.",
+  "environment": {
+    "python": "3.13.4",
+    "scikit_learn": "1.9.1",
+    "pandas": "2.3.3",
+    "numpy": "2.5.5"
+  }
+}

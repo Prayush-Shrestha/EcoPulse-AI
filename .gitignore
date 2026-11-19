@@ -65,10 +65,10 @@ data/external/*
 # ---------------------------------------------------------------------------
 # ML artefacts
 # ---------------------------------------------------------------------------
-machine-learning/models/*
+# Keep small metadata and feature definitions; model binaries stay local.
+machine-learning/models/**/*.joblib
+machine-learning/models/**/*.pkl
 !machine-learning/models/.gitkeep
-*.joblib
-*.pkl
 
 # ---------------------------------------------------------------------------
 # Airflow / Spark local state

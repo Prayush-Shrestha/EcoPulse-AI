@@ -19,6 +19,9 @@ The initial scaffold was created and inspected on this machine:
 | Docker Compose | 5.1.4 | Compose v2 syntax |
 | Java | 17.0.20 LTS | Required by future PySpark work |
 | PostgreSQL | 17 (container) | Not installed natively |
+| scikit-learn | 1.9.1 | Dedicated `machine-learning/.venv` |
+| ML data stack | pandas 2.3.3, NumPy 2.5.5, PyArrow 26.0.1, Joblib 1.6.0 | Same ML environment |
+| nbconvert | 7.17.2 | Executes the Phase 2-4 notebooks |
 
 ### Compatibility notes
 
@@ -29,7 +32,12 @@ The initial scaffold was created and inspected on this machine:
   This avoids unnecessary image/runtime surprises and is compatible with the
   future Airflow container. The application code targets Python 3.11+.
 - **PySpark 4.3 needs Java 17.** Java 17 is installed, but Spark is not part of
-  the Phase 1 install because there is no pipeline yet.
+  the current install because no Spark job exists yet.
+- **Machine learning uses its own environment.** Install the Phase 4 packages
+  only into `machine-learning/.venv`; the backend and data-engineering
+  environments are separate. The notebook kernel is `ecopulse-ml`, and on this
+  machine Jupyter needed `JUPYTER_PATH` set because a backend kernelspec shim
+  resolved before the ML environment.
 - **Docker Desktop must be running** before Compose commands. Both images were
   built locally after the daemon started, and the full stack reached a healthy
   state: Alembic revision `0001` applied, the health endpoint reported `ok` for
@@ -87,6 +95,45 @@ URLs:
 
 The interface can be started before the backend. Its status panel will show an
 offline API and retry every 30 seconds.
+
+### Phase 4 machine-learning route
+
+The four Phase 3 Parquet outputs must exist in `data/processed/` before running
+the pipeline:
+
+```powershell
+cd D:\ai\EcoPulse-AI\machine-learning
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+cd D:\ai\EcoPulse-AI
+machine-learning\.venv\Scripts\python.exe machine-learning\src\06_run_ml_pipeline.py
+```
+
+The pipeline validates the Phase 3 inputs, prepares both datasets, trains and
+evaluates the forecasting candidates, fits the anomaly detectors, reloads both
+saved models, and writes six reports plus twelve figures. The verified local run
+took about 163 seconds and passed 128/128 checks.
+
+The executed notebooks read saved artefacts and do not retrain the models.
+Register the ML kernel once, then execute either notebook:
+
+```powershell
+cd D:\ai\EcoPulse-AI
+machine-learning\.venv\Scripts\python.exe -m ipykernel install `
+  --prefix machine-learning\.venv --name ecopulse-ml `
+  --display-name "EcoPulse ML (Python 3.13)"
+
+$env:JUPYTER_PATH = "$PWD\machine-learning\.venv\share\jupyter"
+machine-learning\.venv\Scripts\python.exe -m nbconvert --to notebook --execute `
+  --inplace --ExecutePreprocessor.timeout=900 `
+  --ExecutePreprocessor.kernel_name=ecopulse-ml `
+  data-engineering\notebooks\03_energy_forecasting.ipynb
+```
+
+Use `python -m nbconvert` rather than `python -m jupyter nbconvert` in the ML
+environment. On this machine the latter dispatched through a backend virtual
+environment shim and could not find the ML kernel.
 
 ---
 
@@ -152,11 +199,19 @@ npm run build
 
 cd ..
 docker compose --env-file .env.example config --quiet
+
+# Phase 4 pipeline and saved-model verification
+machine-learning\.venv\Scripts\python.exe machine-learning\src\06_run_ml_pipeline.py
 ```
 
 The backend health tests use fake session doubles, so Pytest does not require a
 running database. CI separately applies migrations against a real PostgreSQL
 service to validate connectivity.
+
+The machine-learning pipeline requires the Phase 3 Parquet outputs and writes
+only to `data/processed/ml/`, `machine-learning/models/` and
+`reports/machine-learning/`. It exits non-zero if any validation or saved-model
+check fails.
 
 Run `npm ci` instead of `npm install` when validating the committed lockfile.
 
@@ -211,6 +266,21 @@ The API stays available by design; only readiness returns `503`.
 The backend intentionally rejects other drivers. Use the Psycopg 3 SQLAlchemy
 URL format shown in the example files.
 
+### `nbconvert` cannot find the `ecopulse-ml` kernel
+
+`jupyter kernelspec list` may resolve the backend environment on this machine.
+Use the ML environment directly and point Jupyter at its data directory:
+
+```powershell
+$env:JUPYTER_PATH = "D:\ai\EcoPulse-AI\machine-learning\.venv\share\jupyter"
+machine-learning\.venv\Scripts\python.exe -m nbconvert --to notebook --execute `
+  --inplace --ExecutePreprocessor.kernel_name=ecopulse-ml `
+  data-engineering\notebooks\04_anomaly_detection.ipynb
+```
+
+If the kernel is missing, register it with the `ipykernel install --prefix
+machine-learning\.venv --name ecopulse-ml` command shown above.
+
 ---
 
 ## 7. What is not installed
@@ -221,8 +291,9 @@ with their phases:
 - Apache Airflow
 - PySpark and Java-based Spark jobs
 - Pandas/scikit-learn in the backend virtual environment
-- Jupyter notebooks and dataset downloads
+- automated dataset download and a formal data-source manifest
 - frontend end-to-end test tooling
 
-Do not add them to the backend environment. Their requirements live in
-`data-engineering/`, `machine-learning/`, and the future Airflow container.
+Do not add them to the backend environment. Data-engineering and machine-learning
+packages live in their own virtual environments, and Airflow will run in its own
+container.

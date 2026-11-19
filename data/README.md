@@ -31,7 +31,8 @@ and [`data-engineering/notebooks/01_exploratory_data_analysis.ipynb`](../data-en
 Generated reports and figures live in [`reports/eda/`](../reports/eda/).
 
 Download automation and a formal ingestion manifest remain future work; the
-current file was placed manually for Phase 2 and is reused unchanged by Phase 3.
+current file was placed manually for Phase 2 and is reused unchanged by Phases 3
+and 4.
 
 ## Phase 3 processed datasets
 
@@ -58,6 +59,26 @@ Reports and figures live in
 [`reports/data-engineering/`](../reports/data-engineering/), and the executed
 notebook is
 [`02_data_cleaning_and_transformation.ipynb`](../data-engineering/notebooks/02_data_cleaning_and_transformation.ipynb).
+
+## Phase 4 ML datasets
+
+Phase 4 reads the Phase 3 Parquet files without modifying them and writes
+reproducible machine-learning artefacts under `processed/ml/`:
+
+| File | Description |
+| --- | --- |
+| `forecasting_dataset.parquet` | Hourly grid with causal features, target and chronological split labels |
+| `forecasting_predictions.parquet` | Stored predictions for all five candidates and all splits |
+| `preparation_summary.json` | Row counts, exclusions and split boundaries |
+| `forecasting_training_summary.json` | Candidate parameters, validation ranking and selected model |
+| `anomaly_dataset.parquet` | Cleaned minute rows with 20 model features and split labels |
+| `anomaly_predictions.parquet` | Scores and flags for both unsupervised methods |
+| `anomaly_training_summary.json` | Anomaly model parameters and split counts |
+
+These files are ignored by Git. They are rebuilt by
+`machine-learning/src/06_run_ml_pipeline.py`, which also writes six reports and
+twelve figures under `reports/machine-learning/`. See the
+[machine-learning README](../machine-learning/README.md) for the data contract.
 
 ## Rules
 

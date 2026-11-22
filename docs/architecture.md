@@ -4,7 +4,7 @@ EcoPulse AI is a local-first energy intelligence system. This document describes
 the boundaries that matter now, the target data path, and the decisions that
 keep later phases maintainable.
 
-**Document status:** Phases 1-4 implemented, later phases planned.
+**Document status:** Phases 1-5 implemented, later phases planned.
 
 ---
 
@@ -65,6 +65,21 @@ flowchart LR
     API -->|"OpenAPI"| DOCS["/docs"]
 ```
 
+Phase 5 completes that path with domain data and real inference:
+
+```mermaid
+flowchart LR
+    PQ[("Phase 3 Parquet<br/>2,049,356 minutes")] -->|"batched import"| DB[("PostgreSQL<br/>energy_readings")]
+    DB --> ENERGY["/api/v1/energy<br/>/analytics"]
+    MODELS[("Phase 4 Joblib<br/>Random Forest + Isolation Forest")] --> REG["Model registry<br/>loaded once at startup"]
+    REG --> FORECAST["/api/v1/forecasts<br/>recursive 1/6/24/48 h"]
+    REG --> ANOMALY["/api/v1/anomalies<br/>decision_function scoring"]
+    DB --> FORECAST
+    DB --> ANOMALY
+    FORECAST -->|"forecast_records"| DB
+    ANOMALY -->|"anomaly_records"| DB
+```
+
 The Phase 4 machine-learning subset is a local batch path that reads Parquet
 files directly instead of querying PostgreSQL:
 
@@ -102,13 +117,17 @@ availability separately.
 ### Native development
 
 - Frontend: `next dev` on the host.
-- Backend: Uvicorn with reload on the host.
+- Backend: Uvicorn with reload on the host, with PostgreSQL published on host
+  port `5433` in this checkout so it does not collide with other local
+  databases. `backend/.env` must use that port.
 - Database: PostgreSQL container or a local PostgreSQL 17 installation.
 - Machine learning: a dedicated `machine-learning/.venv`, run as a batch pipeline.
+  The backend loads its saved artefacts but never imports that environment.
 - Airflow/Spark: not started in any phase yet.
 
 This mode is the fastest feedback loop and is documented in
-[development.md](development.md).
+[development.md](development.md). Backend-specific setup, endpoints and the
+verification record are in [../backend/README.md](../backend/README.md).
 
 ---
 
@@ -147,16 +166,43 @@ environment, database URL, and CORS origins come from
 `app/core/config.py` (Pydantic Settings, read from the environment or
 `backend/.env`).
 
+During lifespan startup the application logs structured JSON, runs a database
+health check, and loads both Phase 4 artefacts once into a process-wide,
+thread-safe `ModelRegistry`. Model loading never crashes the process: a missing
+or corrupt bundle is recorded in `registry.errors`, reported as `degraded` by
+the health endpoint, and raised as `503 model_unavailable` when a route needs it.
+
 ### Package layout
 
 | Path | Responsibility |
 | --- | --- |
-| `app/api/v1/` | HTTP route definitions and dependencies |
-| `app/core/` | Cross-cutting configuration |
+| `app/api/v1/endpoints/` | HTTP route definitions (health, energy, forecasts, anomalies, analytics, models) |
+| `app/api/v1/router.py` | Versioned router assembly |
+| `app/core/` | Configuration, typed API errors, JSON logging with request IDs |
 | `app/db/` | Engine, sessions, and declarative base |
-| `app/models/` | ORM models; empty in Phase 1 |
+| `app/ml/` | Model registry and causal inference feature builders |
+| `app/models/` | SQLAlchemy ORM models for the three domain tables |
+| `app/repositories/` | SQLAlchemy query layer |
 | `app/schemas/` | Pydantic request/response contracts |
-| `alembic/` | Migration environment and revisions |
+| `app/services/` | Business logic and validation |
+| `scripts/` | Batched, idempotent Parquet importer |
+| `alembic/` | Migration environment and revisions `0001`, `0002` |
+
+Request flow: `endpoint → service → repository → ORM model`. Endpoints stay
+thin; services own validation and inference; repositories own SQL.
+
+### Error contract
+
+Every failure returns one envelope:
+
+```json
+{ "error": { "code": "validation_error", "message": "...", "details": null } }
+```
+
+Codes are `not_found` (404), `validation_error` and `insufficient_history`
+(422), `database_unavailable` and `model_unavailable` (503), and
+`internal_error` (500). Unexpected exceptions are logged with their traceback
+but never returned to a client; `DEBUG` adds only the exception type.
 
 ### Health contract
 
@@ -181,8 +227,10 @@ strings never appear in responses.
 - The API process starts even if PostgreSQL is down, because the engine is lazy
   and no connection is opened at import time.
 - `pool_pre_ping` avoids handing out stale connections after a database restart.
-- Requests that require domain data will fail explicitly in later phases; the
-  health endpoint stays observational.
+- Domain routes fail explicitly with the error envelope above; the health
+  endpoint stays observational and always returns `200` except readiness.
+- Missing model artefacts degrade the model checks instead of failing startup,
+  so `/docs` and liveness remain available for debugging.
 
 ---
 
@@ -191,9 +239,26 @@ strings never appear in responses.
 - PostgreSQL 17 is the only supported database.
 - SQLAlchemy 2.x uses the synchronous `psycopg` 3 driver.
 - Alembic owns schema changes. No manual `CREATE TABLE` statements in the app.
-- The initial revision `0001` is an intentional empty baseline so migration
-  history is established before Phase 2.
-- Domain tables will be introduced only with the data model that needs them.
+- Revision `0001` is an intentional empty baseline so migration history was
+  established before the domain schema existed.
+- Revision `0002` introduces the Phase 5 domain tables.
+
+| Table | Contents | Key constraints |
+| --- | --- | --- |
+| `energy_readings` | Imported Phase 3 minute observations | Unique naive `timestamp`, non-negative check constraints |
+| `forecast_records` | One row per generated forecast point | `forecast_horizon` between 1 and 48 |
+| `anomaly_records` | One row per scoring decision | `detection_method`, `severity`, `is_anomaly` |
+
+Precision decisions:
+
+- Energy, prediction and anomaly-score columns use `Numeric(18, 9)`. Minute
+  energy values are recurring decimals (for example `0.070266666666667`), so a
+  6-decimal column would drift in hourly sums; measured drift after the change
+  is below `6.4e-9` per hour versus the Parquet source.
+- Measurement timestamps are naive local civil time to match the immutable
+  Phase 3 dataset; the API rejects timezone-aware inputs instead of inventing
+  an offset. Audit columns (`created_at`, `detected_at`) are timezone-aware
+  server times.
 
 Why synchronous SQLAlchemy: the workload is local and analytical rather than
 high-concurrency, and synchronous sessions are easier to reason about for a solo
@@ -232,11 +297,33 @@ volume or batch semantics justify it, not merely to satisfy a technology list.
 - Evaluation uses chronological splits; random splits are not acceptable for
   time-series forecasting.
 
+### Phase 5 serving implementation
+
+Phase 5 closes step 4 and step 7 of the pipeline for the backend.
+
+- **Ingestion:** `backend/scripts/import_processed_data.py` streams
+  `household_power_cleaned.parquet` row group by row group into
+  `energy_readings` in batches of 5,000, validating schema, nulls, numeric
+  ranges and timestamp naivety before any insert. Inserts use
+  `ON CONFLICT (timestamp) DO NOTHING` and `RETURNING id`, so a re-run reports
+  exactly how many rows were inserted rather than skipped. Verified full load:
+  2,049,356 rows; verified re-run: `Inserted: 0`.
+- **Serving:** every API number is either a stored row or a loaded model
+  output. Forecast and anomaly writes land in `forecast_records` and
+  `anomaly_records`, so history endpoints read persisted results rather than
+  recomputing them.
+- **Inference parity:** the Phase 4 feature engineering is reimplemented in
+  `backend/app/ml/inference.py` and compared against the Phase 4 datasets on
+  real rows (forecast features within `4.219e-15`, predictions within
+  `3.331e-16`, anomaly scores within `6.801e-09`, zero label disagreements).
+  The backend never imports `machine-learning/` code at runtime.
+- **Aggregates:** hourly, daily and monthly endpoints group in SQL and mark
+  incomplete periods instead of silently treating missing minutes as zero.
+
 ### Phase 4 machine-learning implementation
 
 Phase 4 keeps the same principles but runs as a local batch process over the
-Phase 3 Parquet outputs. PostgreSQL ingestion is still future work, so the
-machine-learning layer has no database dependency.
+Phase 3 Parquet outputs, with no database dependency of its own.
 
 - **Inputs:** revalidated `household_power_cleaned.parquet` and
   `household_power_hourly.parquet`. Raw files and Phase 3 outputs are never
@@ -335,13 +422,19 @@ rate limiting, and dependency scanning must be designed first.
 | Chronological 70/15/15 splits with validation-only selection | Prevents temporal leakage and test-set reuse in both Phase 4 experiments. |
 | One-hour forecast horizon from causal lags | Matches the available resolution; recursive multi-day forecasting was not validated. |
 | Unsupervised anomaly detection without accuracy claims | No reliable labels exist, so detections are framed as investigation candidates. |
+| Inference features reimplemented in the backend | The API never imports the training environments, yet stays numerically identical to Phase 4. |
+| One process-wide model registry loaded at startup | Model files are read once, predictions are consistent within a process, and a missing bundle degrades to `503` instead of crashing. |
+| `Numeric(18, 9)` for energy, predictions and scores | Minute energy values are recurring decimals; 6-decimal storage drifted hourly sums by more than `6.4e-9`. |
+| Naive local timestamps for measurements | Matches the immutable Phase 3 dataset; timezone-aware inputs are rejected rather than silently converted. |
+| Duplicate-safe batched import | `ON CONFLICT DO NOTHING` plus `RETURNING id` makes a 2-million-row import safe to re-run and honestly reportable. |
+| Honest test skips for git-ignored artefacts | Fresh clones skip Parquet- and model-dependent tests with an explicit reason instead of failing or inventing data. |
 
 ---
 
 ## 12. Phase boundary
 
-Phases 1-4 end at a runnable foundation, a reproducible local data pipeline and a
-local intelligence layer:
+Phases 1-5 end at a runnable foundation, a reproducible local data pipeline, a
+local intelligence layer, and a serving layer over real data:
 
 - Phase 1: monorepo, API, database wiring, frontend shell, containers and CI.
 - Phase 2: raw dataset inspection, EDA, reports and figures.
@@ -349,13 +442,17 @@ local intelligence layer:
   validation and four Parquet outputs.
 - Phase 4: leakage-safe hourly forecasting, unsupervised anomaly detection,
   saved local models, six reports, twelve figures and two executed notebooks.
+- Phase 5: full PostgreSQL ingestion (2,049,356 rows), domain schema under
+  Alembic revision `0002`, a modular versioned API serving energy, forecast,
+  anomaly, analytics and model routes with real Phase 4 inference, and a 55-test
+  suite against a dedicated test database.
 
 The project still deliberately does **not** include:
 
-- domain ingestion into PostgreSQL or energy domain tables,
 - Airflow DAGs or Spark jobs,
-- API serving of forecasts or anomaly scores,
-- consumption dashboards,
+- consumption dashboards and end-to-end interface tests,
+- automated dataset download and a formal source manifest,
+- authentication or multi-user tenancy,
 - cloud deployment.
 
 Those are separate phases with their own review and verification.

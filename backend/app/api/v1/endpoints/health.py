@@ -1,3 +1,7 @@
+"""Health and readiness endpoints including ML model status."""
+
+from __future__ import annotations
+
 import logging
 from datetime import UTC, datetime
 from time import perf_counter
@@ -9,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
+from app.ml.model_loader import ModelRegistry, get_model_registry
 from app.schemas.health import HealthCheck, HealthResponse, LivenessResponse
 
 logger = logging.getLogger(__name__)
@@ -18,7 +23,6 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 def _database_check(db: Session) -> HealthCheck:
     started = perf_counter()
-
     try:
         db.execute(text("SELECT 1"))
     except Exception as exc:  # noqa: BLE001 - health checks must never crash the API
@@ -29,10 +33,30 @@ def _database_check(db: Session) -> HealthCheck:
     return HealthCheck(status="ok", latency_ms=latency_ms)
 
 
-def _collect_health(db: Session, settings: Settings) -> HealthResponse:
+def _model_check(registry: ModelRegistry, key: str) -> HealthCheck:
+    artifact = registry.forecast if key == "forecasting" else registry.anomaly
+    if artifact is None:
+        return HealthCheck(
+            status="unavailable",
+            detail=registry.errors.get(key, "Model artefact is not loaded."),
+        )
+    return HealthCheck(
+        status="ok",
+        detail=f"{artifact.name} {artifact.version} loaded.",
+    )
+
+
+def _collect_health(
+    db: Session,
+    settings: Settings,
+    registry: ModelRegistry,
+) -> HealthResponse:
+    registry.load()
     checks = {
         "api": HealthCheck(status="ok"),
         "database": _database_check(db),
+        "forecast_model": _model_check(registry, "forecasting"),
+        "anomaly_model": _model_check(registry, "anomaly_detection"),
     }
     status = "ok" if all(check.status == "ok" for check in checks.values()) else "degraded"
 
@@ -51,15 +75,16 @@ def _collect_health(db: Session, settings: Settings) -> HealthResponse:
     response_model=HealthResponse,
     summary="Aggregate health",
     description=(
-        "Report API and database health without failing the request. "
+        "Report API, PostgreSQL and saved-model health without failing the request. "
         "Use /health/ready for a readiness probe with a 503 response."
     ),
 )
 def health(
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[ModelRegistry, Depends(get_model_registry)],
 ) -> HealthResponse:
-    return _collect_health(db, settings)
+    return _collect_health(db, settings, registry)
 
 
 @router.get(
@@ -85,8 +110,9 @@ def readiness(
     response: Response,
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
+    registry: Annotated[ModelRegistry, Depends(get_model_registry)],
 ) -> HealthResponse:
-    payload = _collect_health(db, settings)
+    payload = _collect_health(db, settings, registry)
     if payload.status != "ok":
         response.status_code = 503
     return payload

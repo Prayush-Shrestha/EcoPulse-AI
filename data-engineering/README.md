@@ -219,5 +219,7 @@ verification details are in `../machine-learning/README.md`.
   datasets, five reports and an executed 20-section notebook.
 - Phase 4: leakage-safe hourly forecasting, unsupervised anomaly detection,
   saved local models, six reports, twelve figures and two executed notebooks.
-- Phase 5 and later: database ingestion, API serving, Airflow/Spark jobs and
-  analytics views.
+- Phase 5: database ingestion into PostgreSQL, versioned API serving of real
+  inference, analytics endpoints and a 55-test suite.
+- Phase 6 and later: analytics dashboards, Airflow/Spark jobs and cloud
+  deployment.

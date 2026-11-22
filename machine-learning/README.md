@@ -5,7 +5,8 @@ energy forecasting and unsupervised anomaly detection. Both workflows read the
 real Phase 3 Parquet outputs, use chronological splits, persist their fitted
 artefacts locally, and write evidence reports and figures.
 
-**Status:** Phase 4 is complete. No Phase 5 dashboard, API serving, cloud model
+**Status:** Phase 4 is complete. Phase 5 now serves these saved models through
+the backend API (see `../backend/README.md`); no dashboard, cloud model
 registry, or labelled anomaly claim is included.
 
 ## Environment
@@ -219,5 +220,7 @@ Known limitations:
 - Saved-model verification confirms reproducibility, not correctness against
   unavailable ground truth.
 
-Phase 5 has not started. There is no API endpoint, dashboard, database ingestion,
-Airflow DAG or cloud service for these models.
+The Phase 5 backend now serves these models through versioned API endpoints
+(`/api/v1/forecasts`, `/api/v1/anomalies`), storing results in PostgreSQL; the
+serving implementation is documented in `../backend/README.md`. There is still
+no dashboard, Airflow DAG or cloud service.

@@ -13,3 +13,6 @@ known-third-party = ["alembic"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+markers = [
+    "requires_models: needs the git-ignored Phase 4 Joblib artefacts under machine-learning/models",
+]

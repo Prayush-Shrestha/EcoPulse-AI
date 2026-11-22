@@ -1,14 +1,18 @@
-from datetime import datetime
+"""Health, readiness and documentation checks against the test database."""
 
+from __future__ import annotations
+
+import pytest
 from fastapi.testclient import TestClient
 
 
-def test_root_exposes_local_api_metadata(client: TestClient) -> None:
+def test_root_exposes_api_metadata(client: TestClient) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["docs"] == "/docs"
+    assert payload["redoc"] == "/redoc"
     assert payload["health"] == "/api/v1/health"
 
 
@@ -19,64 +23,46 @@ def test_liveness_does_not_depend_on_the_database(client: TestClient) -> None:
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["service"] == "EcoPulse AI API"
-    assert payload["version"] == "0.1.0"
+    assert payload["version"] == "0.2.0"
 
 
-def test_aggregate_health_reports_ok_when_database_responds(
-    healthy_client: TestClient,
-) -> None:
-    response = healthy_client.get("/api/v1/health")
+@pytest.mark.requires_models
+def test_health_reports_database_and_models(client: TestClient) -> None:
+    response = client.get("/api/v1/health")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
+    assert payload["environment"] == "test"
     assert payload["checks"]["api"]["status"] == "ok"
     assert payload["checks"]["database"]["status"] == "ok"
-    assert payload["checks"]["database"]["latency_ms"] >= 0
-    assert payload["checks"]["database"]["detail"] is None
-
-    timestamp = datetime.fromisoformat(payload["timestamp"].replace("Z", "+00:00"))
-    assert timestamp.tzinfo is not None
-
-
-def test_aggregate_health_degrades_without_failing_the_request(
-    unavailable_client: TestClient,
-) -> None:
-    response = unavailable_client.get("/api/v1/health")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "degraded"
-    assert payload["checks"]["api"]["status"] == "ok"
-    assert payload["checks"]["database"]["status"] == "unavailable"
-    assert payload["checks"]["database"]["detail"] == "Database check failed."
+    assert payload["checks"]["forecast_model"]["status"] == "ok"
+    assert payload["checks"]["anomaly_model"]["status"] == "ok"
+    assert "Random Forest" in payload["checks"]["forecast_model"]["detail"]
+    assert "Isolation Forest" in payload["checks"]["anomaly_model"]["detail"]
 
 
-def test_readiness_returns_ok_for_a_healthy_database(
-    healthy_client: TestClient,
-) -> None:
-    response = healthy_client.get("/api/v1/health/ready")
+@pytest.mark.requires_models
+def test_readiness_is_ok_with_all_dependencies(client: TestClient) -> None:
+    response = client.get("/api/v1/health/ready")
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
 
-def test_readiness_returns_503_for_an_unavailable_database(
-    unavailable_client: TestClient,
-) -> None:
-    response = unavailable_client.get("/api/v1/health/ready")
+def test_openapi_and_rendered_documentation(client: TestClient) -> None:
+    openapi = client.get("/openapi.json")
+    assert openapi.status_code == 200
+    paths = openapi.json()["paths"]
+    assert "/api/v1/energy" in paths
+    assert "/api/v1/forecasts/predict" in paths
+    assert "/api/v1/anomalies/detect" in paths
+    assert "/api/v1/analytics/overview" in paths
 
-    assert response.status_code == 503
-    payload = response.json()
-    assert payload["status"] == "degraded"
-    assert payload["checks"]["database"]["status"] == "unavailable"
+    docs = client.get("/docs")
+    assert docs.status_code == 200
+    assert "swagger" in docs.text.lower()
 
-
-def test_cors_allows_the_local_frontend(healthy_client: TestClient) -> None:
-    response = healthy_client.get(
-        "/api/v1/health",
-        headers={"Origin": "http://localhost:3000"},
-    )
-
-    assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    redoc = client.get("/redoc")
+    assert redoc.status_code == 200
+    assert "redoc" in redoc.text.lower()

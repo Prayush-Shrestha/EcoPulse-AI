@@ -7,14 +7,16 @@ combines data engineering, machine learning, and full-stack development on a
 fully inspectable local stack: no cloud hosting, no paid services, and no
 invented production data.
 
-> **Project status: Phase 4 - Intelligence: forecasting and anomaly detection.**
+> **Project status: Phase 5 - Serving: persistence, versioned API, real
+> inference.**
 > The monorepo, interface, API health contract, database wiring, containers, CI,
-> raw dataset, inspection reports, EDA, and the Phase 3 cleaning and
-> transformation ETL are in place. Phase 4 adds a reproducible, leakage-safe
-> hourly forecasting experiment, an unsupervised anomaly-detection experiment,
-> six machine-learning reports, twelve real figures, locally saved models, and
-> two executed notebooks. API serving, analytics dashboards, and cloud
-> deployment are deliberately not implemented yet.
+> raw dataset, inspection reports, EDA, the Phase 3 cleaning and transformation
+> ETL, and the Phase 4 forecasting and anomaly experiments are in place. Phase 5
+> adds PostgreSQL ingestion of the full 2,049,356-row Phase 3 dataset, three
+> domain tables with Alembic migration `0002`, a modular FastAPI service that
+> serves energy, forecast, anomaly, analytics and model endpoints from the real
+> Phase 4 artefacts, and a 55-test suite run against a dedicated test database.
+> Dashboards and cloud deployment are deliberately not implemented yet.
 
 ---
 
@@ -39,7 +41,8 @@ run, and verified by another developer.
   like real measurements.
 - No fabricated model metrics or anomaly labels. Phase 4 results are computed
   from the real Phase 3 Parquet outputs, and anomaly detections are explicitly
-  unlabelled deviation candidates.
+  unlabelled deviation candidates. API responses never invent a value: every
+  number traces to a stored row or a loaded model.
 - No cloud infrastructure, paid APIs, or live deployment.
 - No authentication or multi-user tenancy; this is a local single-user project.
 - No Airflow or Spark runtime in Phase 3. They are documented in the target
@@ -52,16 +55,19 @@ run, and verified by another developer.
 | Layer | Technology | Role |
 | --- | --- | --- |
 | Interface | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts | Product surface and future analytics views |
-| API | Python, FastAPI, Pydantic, SQLAlchemy 2 | Typed local service and health contract |
+| API | Python, FastAPI, Pydantic, SQLAlchemy 2, Alembic | Typed local service, persistence and versioned routes |
 | Database | PostgreSQL 17, Alembic | Durable storage and versioned schema |
 | Data engineering | Pandas, NumPy, PyArrow, Pandera, PySpark, Apache Airflow | Cleaning, validation, transformation and orchestration |
-| Machine learning | scikit-learn, Joblib | Hourly forecasting and unsupervised anomaly detection (Phase 4) |
+| Machine learning | scikit-learn, Joblib | Hourly forecasting and unsupervised anomaly detection (Phase 4), served by the API (Phase 5) |
 | Testing | Pytest, Ruff, ESLint, TypeScript | Backend tests and frontend quality gates |
 | Infrastructure | Docker, Docker Compose, GitHub Actions | Reproducible local runtime and CI |
 
 Python environments are intentionally separated:
 
-- `backend/` runs the API only.
+- `backend/` runs the API only. It carries the inference stack
+  (`pandas`, `numpy`, `scikit-learn`, `joblib`, `pyarrow`) pinned to the Phase 4
+  training versions so served predictions match the saved models, but it never
+  imports `machine-learning/` or `data-engineering/` code.
 - `data-engineering/` and `machine-learning/` carry the heavier analytics stack.
 - Airflow will run in its own container, not in the API virtual environment.
 
@@ -117,9 +123,25 @@ Phase 4 adds:
 - Six reports and twelve figures in `reports/machine-learning/`
 - Two executed notebooks covering forecasting and anomaly detection
 
-Still not implemented: automated dataset download, domain ingestion into
-PostgreSQL, domain schema models, Airflow DAGs, Spark jobs, API serving of
-forecasts or anomaly scores, and energy dashboards.
+Phase 5 adds:
+
+- Batched, idempotent import of all 2,049,356 cleaned minute rows into
+  PostgreSQL, with progress reporting and duplicate-safe inserts
+- Alembic revision `0002`: `energy_readings`, `forecast_records`,
+  `anomaly_records`, with `Numeric(18, 9)` precision for energy, predictions and
+  scores
+- A modular API (`endpoints → services → repositories → models`) serving health,
+  energy, forecast, anomaly, analytics and model routes under `/api/v1`
+- Real inference: the saved Phase 4 models are loaded once at startup and served
+  with feature parity verified against the Phase 4 datasets
+- Structured JSON logging with request IDs, a single JSON error envelope, and
+  restricted CORS
+- Swagger UI at `/docs`, ReDoc at `/redoc` and `/openapi.json`
+- 55 Pytest tests against a dedicated `ecopulse_test` database, plus a live
+  34-check endpoint verification against a running server
+
+Still not implemented: automated dataset download, Airflow DAGs, Spark jobs,
+consumption dashboards, authentication, and cloud deployment.
 
 ---
 
@@ -132,15 +154,20 @@ EcoPulse-AI/
 ├── airflow/
 │   └── dags/                   Airflow DAGs (later phases)
 ├── backend/
-│   ├── alembic/                Migration environment and baseline revision
+│   ├── alembic/                Migrations: 0001 baseline, 0002 domain tables
 │   ├── app/
-│   │   ├── api/v1/             Versioned HTTP routes
-│   │   ├── core/               Settings
+│   │   ├── api/v1/endpoints/   health, energy, forecasts, anomalies, analytics, models
+│   │   ├── core/               Settings, typed errors, JSON logging
 │   │   ├── db/                 SQLAlchemy engine, session, declarative base
-│   │   ├── models/             ORM models (empty until domain ingestion)
-│   │   ├── schemas/            Pydantic response models
-│   │   └── main.py             FastAPI application factory
-│   ├── tests/                  Pytest health-contract tests
+│   │   ├── ml/                 Model registry and causal inference features
+│   │   ├── models/             ORM models for the three domain tables
+│   │   ├── repositories/       Query layer
+│   │   ├── schemas/            Pydantic request/response contracts
+│   │   ├── services/           Business logic
+│   │   └── main.py             Lifespan, middleware, error handlers, docs
+│   ├── scripts/                Batched Parquet importer
+│   ├── tests/                  55 Pytest tests against ecopulse_test
+│   ├── README.md               Backend setup, endpoints and verification
 │   ├── Dockerfile
 │   └── requirements*.txt
 ├── data/
@@ -206,8 +233,9 @@ docker compose up --build
 | --- | --- |
 | Web interface | http://localhost:3000 |
 | FastAPI docs | http://localhost:8000/docs |
+| ReDoc | http://localhost:8000/redoc |
 | Aggregate health | http://localhost:8000/api/v1/health |
-| PostgreSQL | localhost:5432 |
+| PostgreSQL | localhost:`POSTGRES_PORT` (5433 in this local `.env`) |
 
 Stop the stack with `docker compose down`. Add `-v` only when you intentionally
 want to delete the local database volume.
@@ -229,7 +257,9 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
+# Set DATABASE_URL to the host port published by the db container (5433 here).
 alembic upgrade head
+python scripts\import_processed_data.py          # 2,049,356 rows, idempotent
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -245,6 +275,9 @@ npm run dev
 Open http://localhost:3000. The status panel queries the real API health
 endpoint; when PostgreSQL is unavailable it reports a degraded state instead of
 inventing a successful one.
+
+Full backend instructions, the endpoint reference and the verification record
+are in [backend/README.md](backend/README.md).
 
 ### Option C - Phase 4 machine-learning pipeline
 
@@ -276,25 +309,32 @@ contract, results and notebook commands.
 | `POSTGRES_DB` | Compose | `ecopulse` | Database name |
 | `POSTGRES_USER` | Compose | `ecopulse` | Database role |
 | `POSTGRES_PASSWORD` | Compose | `ecopulse_local_dev` | Local-only password |
-| `POSTGRES_PORT` | Compose | `5432` | Host port for PostgreSQL |
+| `POSTGRES_PORT` | Compose | `5432` (5433 in this local `.env`) | Host port for PostgreSQL |
 | `API_PORT` | Compose | `8000` | Host port for FastAPI |
 | `FRONTEND_PORT` | Compose | `3000` | Host port for Next.js |
-| `DATABASE_URL` | Backend | `postgresql+psycopg://...` | SQLAlchemy connection URL |
+| `DATABASE_URL` | Backend | `postgresql+psycopg://...@localhost:5433/ecopulse` | SQLAlchemy connection URL |
+| `ML_MODELS_DIR` | Backend | `../machine-learning/models` (`/models` in Compose) | Where the Phase 4 artefacts are loaded from |
 | `CORS_ORIGINS` | Backend | `http://localhost:3000,...` | Comma-separated browser origins |
 | `ENVIRONMENT` | Backend | `development` | `development`, `test`, or `production` |
-| `DEBUG` | Backend | `false` | Debug flag |
+| `DEBUG` | Backend | `false` | Debug flag; 500 responses expose only an exception type |
+| `LOG_LEVEL` | Backend | `INFO` | Structured JSON log level |
+| `IMPORT_BATCH_SIZE` | Backend script | `5000` | Rows per import batch (max 6000) |
+| `IMPORT_PROGRESS_EVERY` | Backend script | `10` | Batches between progress lines |
+| `TEST_DATABASE_URL` | Backend tests | derived from `DATABASE_URL` | Optional explicit test database URL |
 | `NEXT_PUBLIC_API_URL` | Frontend | `http://localhost:8000` | Browser-accessible API base URL |
 
 Copy the provided `.env.example` files. Never commit `.env` files. Docker
 Compose uses the root `.env`; native backend and frontend development use their
-own local files.
+own local files. A native backend must point at the host port published by the
+`db` container, which is `5433` in this checkout so it does not collide with
+another local PostgreSQL.
 
 ---
 
 ## Quality checks
 
 ```powershell
-# Backend
+# Backend (requires the db container: tests use a dedicated ecopulse_test database)
 cd D:\ai\EcoPulse-AI\backend
 .\.venv\Scripts\Activate.ps1
 ruff check .
@@ -314,6 +354,13 @@ docker compose --env-file .env.example config --quiet
 machine-learning\.venv\Scripts\python.exe machine-learning\src\06_run_ml_pipeline.py
 ```
 
+The backend suite runs against `ecopulse_test`, never the development database.
+Because `data/processed/` and the Joblib binaries are Git-ignored, a fresh clone
+skips the tests that need them with an explicit reason instead of failing;
+generate them with the Phase 3 and Phase 4 pipelines to run all 55 tests.
+Verified locally: `ruff check .` clean, `55 passed`, and a live 34-check
+endpoint verification against a running server.
+
 GitHub Actions runs the same quality gates, including migrations against a real
 PostgreSQL service. Container images are not yet built in CI; Compose syntax is
 validated there and local builds are documented in
@@ -321,13 +368,32 @@ validated there and local builds are documented in
 
 ### API endpoints
 
+All routes are versioned under `/api/v1`. Full request and response schemas are
+in `/docs` and `/redoc`.
+
 | Method | Path | Behaviour |
 | --- | --- | --- |
-| `GET` | `/` | Service metadata |
-| `GET` | `/docs` | Swagger UI |
+| `GET` | `/` | Service metadata and documentation links |
+| `GET` | `/docs`, `/redoc`, `/openapi.json` | Generated API documentation |
 | `GET` | `/api/v1/health` | Aggregate health; always `200`, may be `degraded` |
 | `GET` | `/api/v1/health/live` | API liveness; no database access |
 | `GET` | `/api/v1/health/ready` | Readiness; `503` when a dependency is unavailable |
+| `GET` | `/api/v1/energy` | Paginated minute readings with time filters |
+| `GET` | `/api/v1/energy/summary` | Observation count, totals and extremes |
+| `GET` | `/api/v1/energy/hourly` `/daily` `/monthly` | Aggregates with completeness flags |
+| `POST` | `/api/v1/forecasts/predict` | Recursive 1/6/24/48-hour forecast, persisted |
+| `GET` | `/api/v1/forecasts/history` | Stored forecasts with filters |
+| `GET` | `/api/v1/forecasts/latest` | Most recent stored forecast point |
+| `POST` | `/api/v1/anomalies/detect` | Score one stored or supplied minute, persisted |
+| `GET` | `/api/v1/anomalies` | Stored detections with filters |
+| `GET` | `/api/v1/anomalies/summary` | Counts and percentages per method |
+| `GET` | `/api/v1/analytics/overview` | Energy, forecast and anomaly overview |
+| `GET` | `/api/v1/analytics/consumption-patterns` | Hour-of-day, weekday and monthly profiles |
+| `GET` | `/api/v1/models`, `/api/v1/models/{model_key}` | Loaded artefact metadata and thresholds |
+
+Verified locally: **34 live checks passed** against a running server, covering
+every route above plus the 404/422/503 error envelopes. Details are in
+[backend/README.md](backend/README.md#10-live-endpoint-verification).
 
 ---
 
@@ -379,6 +445,7 @@ Full tokens and usage rules are in
 
 - [Architecture](docs/architecture.md) - boundaries, runtime topology, decisions
 - [Development](docs/development.md) - verified versions, setup, troubleshooting
+- [Backend](backend/README.md) - setup, migrations, import, endpoints, verification
 - [Design system](docs/design-system.md) - visual identity and chart guidance
 - [Data engineering](data-engineering/README.md) - inspection, cleaning, ETL and notebooks
 - [Machine learning](machine-learning/README.md) - Phase 4 forecasting, anomaly detection and verification
@@ -389,15 +456,23 @@ Full tokens and usage rules are in
 
 ## Known limitations
 
-- Phases 1-4 only: no domain ingestion into PostgreSQL, no API serving of
-  forecasts or anomaly scores, and no live energy charts. Raw data, processed
-  Parquet files, model binaries, reports and figures are local files.
-- Forecasting is one household and one chronological hold-out. It is not a
-  cross-household generalisation claim, and recursive multi-day forecasting was
-  not evaluated.
+- Phases 1-5 are complete for the local backend: the full cleaned dataset is in
+  PostgreSQL and forecasts, anomaly scores and analytics are served by the API.
+  There are still no consumption dashboards, no Airflow/Spark orchestration, and
+  no deployment. Raw data, processed Parquet files and model binaries remain
+  local files that are not committed to Git.
+- Forecasts are recursive beyond one hour. Only the one-hour horizon has a
+  Phase 4 test metric (MAE 0.3194, RMSE 0.4626, R² 0.5726); longer horizons are
+  produced by recursion and were not separately evaluated, and the experiment is
+  one household with one chronological hold-out rather than a cross-household
+  generalisation claim.
 - The anomaly experiment has no reliable labels, so accuracy, precision, recall
-  and F1 are not reported. Flagged minutes are statistical deviations for
-  investigation, not confirmed faults.
+  and F1 are not reported anywhere, including in API responses. Flagged minutes
+  are statistical deviations for investigation, not confirmed faults, and the
+  `severity` field is a triage heuristic rather than a calibrated fault rating.
+- Anomaly scoring requires 24 prior observed hours; interpolated minutes are
+  excluded from history, so timestamps near the start of the dataset return
+  `insufficient_history`.
 - Airflow is not running natively or in Compose yet; it is container-only on
   Windows and will arrive with the orchestration phase.
 - The processed datasets exclude unresolved long gaps; aggregate totals for
@@ -415,6 +490,7 @@ Full tokens and usage rules are in
 | 02 | Dataset collection, inspection, EDA, reports and findings | Complete |
 | 03 | Cleaning, transformation, validation, ETL and Parquet outputs | Complete |
 | 04 | Intelligence: hourly forecasting, anomaly detection and evaluation | Complete |
-| 05 | Experience: real-data dashboards, integration and end-to-end tests | Not started |
+| 05 | Serving: PostgreSQL ingestion, versioned API, real inference, analytics | Complete |
+| 06 | Experience: real-data dashboards and end-to-end interface tests | Not started |
 
-Phases 1-4 are complete. Phase 5 remains intentionally unimplemented.
+Phases 1-5 are complete. Phase 6 is intentionally not started.

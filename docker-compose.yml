@@ -29,8 +29,11 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       DEBUG: ${DEBUG:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      ML_MODELS_DIR: /models
     ports:
       - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./machine-learning/models:/models:ro
     depends_on:
       db:
         condition: service_healthy

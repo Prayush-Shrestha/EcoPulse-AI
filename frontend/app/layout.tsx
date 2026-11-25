@@ -2,16 +2,19 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 
+import { AppProvider } from "@/lib/app-context";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("http://localhost:3000"),
   title: {
-    default: "EcoPulse AI - Local energy intelligence",
+    default: "EcoPulse AI - Energy intelligence dashboard",
     template: "%s | EcoPulse AI",
   },
   description:
-    "A local-first platform for energy consumption monitoring, forecasting, and anomaly detection, built on real public datasets.",
+    "Energy consumption monitoring, forecasting and anomaly detection dashboard built on real public data and locally trained models.",
   applicationName: "EcoPulse AI",
   keywords: [
     "energy analytics",
@@ -22,9 +25,9 @@ export const metadata: Metadata = {
     "Next.js",
   ],
   openGraph: {
-    title: "EcoPulse AI - Local energy intelligence",
+    title: "EcoPulse AI - Energy intelligence dashboard",
     description:
-      "Energy consumption monitoring, forecasting, and anomaly detection. Local-first, built on real data.",
+      "Energy consumption monitoring, forecasting and anomaly detection. Local-first, built on real data.",
     type: "website",
     locale: "en_GB",
   },
@@ -43,7 +46,11 @@ export default function RootLayout({
       lang="en"
       className={`${GeistSans.variable} ${GeistMono.variable}`}
     >
-      <body className="min-h-screen font-sans antialiased">{children}</body>
+      <body className="min-h-screen font-sans antialiased">
+        <AppProvider>
+          <DashboardLayout>{children}</DashboardLayout>
+        </AppProvider>
+      </body>
     </html>
   );
 }

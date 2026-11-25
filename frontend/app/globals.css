@@ -21,6 +21,7 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    color-scheme: dark;
   }
 
   body {
@@ -63,6 +64,26 @@
 
   .chip {
     @apply inline-flex items-center whitespace-nowrap rounded-md border border-line bg-canvas/60 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted;
+  }
+
+  .field {
+    @apply rounded-lg border border-line bg-canvas px-3 py-2 text-xs text-ink outline-none transition-colors placeholder:text-muted/60 focus:border-primary/40;
+  }
+
+  .data-table {
+    @apply w-full border-collapse text-left text-xs;
+  }
+
+  .data-table th {
+    @apply whitespace-nowrap border-b border-line px-4 py-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-muted/80;
+  }
+
+  .data-table td {
+    @apply border-b border-line/50 px-4 py-2.5 text-ink/90;
+  }
+
+  .data-table tbody tr {
+    @apply transition-colors hover:bg-surface-raised/40;
   }
 }
 

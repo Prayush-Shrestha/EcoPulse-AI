@@ -7,16 +7,16 @@ combines data engineering, machine learning, and full-stack development on a
 fully inspectable local stack: no cloud hosting, no paid services, and no
 invented production data.
 
-> **Project status: Phase 5 - Serving: persistence, versioned API, real
-> inference.**
+> **Project status: Phase 6 - Experience: real-data dashboards and end-to-end
+> interface verification.**
 > The monorepo, interface, API health contract, database wiring, containers, CI,
 > raw dataset, inspection reports, EDA, the Phase 3 cleaning and transformation
-> ETL, and the Phase 4 forecasting and anomaly experiments are in place. Phase 5
-> adds PostgreSQL ingestion of the full 2,049,356-row Phase 3 dataset, three
-> domain tables with Alembic migration `0002`, a modular FastAPI service that
-> serves energy, forecast, anomaly, analytics and model endpoints from the real
-> Phase 4 artefacts, and a 55-test suite run against a dedicated test database.
-> Dashboards and cloud deployment are deliberately not implemented yet.
+> ETL, the Phase 4 forecasting and anomaly experiments, and the Phase 5
+> PostgreSQL serving layer are in place. Phase 6 adds a Next.js dashboard that
+> renders only live backend data across six routes, a typed API client with
+> caching, timeouts and request coalescing, and a 77-check browser verification
+> run against both the dev server and the production build.
+> Cloud deployment is deliberately not implemented yet.
 
 ---
 
@@ -54,7 +54,7 @@ run, and verified by another developer.
 
 | Layer | Technology | Role |
 | --- | --- | --- |
-| Interface | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts | Product surface and future analytics views |
+| Interface | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts, Lucide React | Six-route dashboard over the live API |
 | API | Python, FastAPI, Pydantic, SQLAlchemy 2, Alembic | Typed local service, persistence and versioned routes |
 | Database | PostgreSQL 17, Alembic | Durable storage and versioned schema |
 | Data engineering | Pandas, NumPy, PyArrow, Pandera, PySpark, Apache Airflow | Cleaning, validation, transformation and orchestration |
@@ -90,7 +90,8 @@ flowchart LR
 
 Implemented in Phase 1:
 
-- Next.js interface with a live infrastructure-status panel
+- Next.js interface shell with a live infrastructure-status panel (superseded
+  by the Phase 6 dashboard below)
 - FastAPI service with liveness, readiness, and aggregate health endpoints
 - SQLAlchemy session layer and an Alembic baseline migration
 - PostgreSQL and application images wired through Docker Compose
@@ -140,8 +141,30 @@ Phase 5 adds:
 - 55 Pytest tests against a dedicated `ecopulse_test` database, plus a live
   34-check endpoint verification against a running server
 
+Phase 6 adds:
+
+- A Next.js 16 / TypeScript / Tailwind dashboard with six routes (`/`,
+  `/analytics`, `/forecasting`, `/anomalies`, `/insights`, `/settings`), a
+  persistent sidebar and a header with page title, date-range selector,
+  refresh and a live API status pill
+- A single typed API client (`frontend/lib/api.ts`) behind
+  `NEXT_PUBLIC_API_BASE_URL`, with a 30 s request budget, a 20 s GET cache and
+  in-flight request coalescing; every chart, KPI and table reads only live
+  backend responses — there is no mocked or fabricated data anywhere
+- Reusable data hooks that expose loading, error, empty and refresh states per
+  widget, with cancellation on unmount, so widgets never fetch independently
+- Forecast generation limited to the supported 1/6/24/48-hour horizons, wired
+  to a real `POST /api/v1/forecasts/predict` call
+- Rule-based insights derived from real analytics responses, explicitly
+  without a language model, and anomaly views labelled "detected anomalies,
+  not confirmed faults"
+- A 77-check browser verification run against both `npm run dev` and the
+  production `npm run build` + `npm start` build, covering navigation, KPIs,
+  charts, filters, sorting, pagination, the live predict call, responsive
+  drawer behaviour and offline error states
+
 Still not implemented: automated dataset download, Airflow DAGs, Spark jobs,
-consumption dashboards, authentication, and cloud deployment.
+authentication, and cloud deployment.
 
 ---
 
@@ -186,9 +209,12 @@ EcoPulse-AI/
 │   ├── design-system.md
 │   └── development.md
 ├── frontend/
-│   ├── app/                    App Router pages, layout, global styles
-│   ├── components/             Product surface and live status components
-│   ├── lib/                    Site configuration and health client
+│   ├── app/                    Six App Router routes, layout and global styles
+│   ├── components/             Layout, dashboard widgets, charts and UI primitives
+│   ├── hooks/                  Reusable data hooks (loading/error/refresh)
+│   ├── lib/                    Typed API client, formatters, chart theme, context
+│   ├── types/                  Shared response types for the API client
+│   ├── .env.example            NEXT_PUBLIC_API_BASE_URL template
 │   ├── Dockerfile
 │   └── package.json
 ├── machine-learning/
@@ -268,13 +294,14 @@ Frontend (terminal 2):
 ```powershell
 cd D:\ai\EcoPulse-AI\frontend
 npm install
-Copy-Item .env.example .env.local
+Copy-Item .env.example .env.local   # optional; the default points at localhost:8000
 npm run dev
 ```
 
-Open http://localhost:3000. The status panel queries the real API health
-endpoint; when PostgreSQL is unavailable it reports a degraded state instead of
-inventing a successful one.
+Open http://localhost:3000. The dashboard renders live backend data only: the
+header health pill queries the real API health endpoint, and when PostgreSQL or
+the API is unavailable the affected widgets show an error state with a retry
+action instead of inventing values.
 
 Full backend instructions, the endpoint reference and the verification record
 are in [backend/README.md](backend/README.md).
@@ -321,7 +348,7 @@ contract, results and notebook commands.
 | `IMPORT_BATCH_SIZE` | Backend script | `5000` | Rows per import batch (max 6000) |
 | `IMPORT_PROGRESS_EVERY` | Backend script | `10` | Batches between progress lines |
 | `TEST_DATABASE_URL` | Backend tests | derived from `DATABASE_URL` | Optional explicit test database URL |
-| `NEXT_PUBLIC_API_URL` | Frontend | `http://localhost:8000` | Browser-accessible API base URL |
+| `NEXT_PUBLIC_API_BASE_URL` | Frontend | `http://localhost:8000` | Browser-accessible API base URL (public value only — never secrets) |
 
 Copy the provided `.env.example` files. Never commit `.env` files. Docker
 Compose uses the root `.env`; native backend and frontend development use their
@@ -360,6 +387,17 @@ skips the tests that need them with an explicit reason instead of failing;
 generate them with the Phase 3 and Phase 4 pipelines to run all 55 tests.
 Verified locally: `ruff check .` clean, `55 passed`, and a live 34-check
 endpoint verification against a running server.
+
+For the frontend, `npm run lint`, `npm run typecheck` and `npm run build` all
+exit 0 (six routes prerendered). Beyond the static gates, a live 77-check
+browser verification drives the real UI against the running backend with no
+mocked responses — navigation and header controls, KPI values, chart rendering,
+period presets, table sorting and pagination, a real
+`POST /api/v1/forecasts/predict` call, the insights disclaimer, the responsive
+navigation drawer, and offline error states where KPIs must show `—` instead of
+invented numbers. The same 77 checks were run against both `npm run dev` and
+the production `npm run build` + `npm start` server: **77 passed, 0 failed** on
+each.
 
 GitHub Actions runs the same quality gates, including migrations against a real
 PostgreSQL service. Container images are not yet built in CI; Compose syntax is
@@ -456,11 +494,11 @@ Full tokens and usage rules are in
 
 ## Known limitations
 
-- Phases 1-5 are complete for the local backend: the full cleaned dataset is in
-  PostgreSQL and forecasts, anomaly scores and analytics are served by the API.
-  There are still no consumption dashboards, no Airflow/Spark orchestration, and
-  no deployment. Raw data, processed Parquet files and model binaries remain
-  local files that are not committed to Git.
+- Phases 1-6 are complete for the local stack: the full cleaned dataset is in
+  PostgreSQL, forecasts, anomaly scores and analytics are served by the API,
+  and the dashboard renders that data across six routes. Airflow/Spark
+  orchestration and deployment are still missing. Raw data, processed Parquet
+  files and model binaries remain local files that are not committed to Git.
 - Forecasts are recursive beyond one hour. Only the one-hour horizon has a
   Phase 4 test metric (MAE 0.3194, RMSE 0.4626, R² 0.5726); longer horizons are
   produced by recursion and were not separately evaluated, and the experiment is
@@ -479,8 +517,11 @@ Full tokens and usage rules are in
   partial intervals therefore cover valid minutes only and are flagged.
 - The Docker images have not been exercised automatically in CI.
 - There is no authentication because the system is designed for local use only.
-- The frontend status panel shows infrastructure state only. It is deliberately
-  not a metrics dashboard.
+- The heaviest analytics endpoints (`analytics/overview`,
+  `analytics/consumption-patterns`) take roughly 7-12 s against the local
+  database and longer when several widgets refetch at once, so their cards show
+  loading skeletons for that period; the client request budget is 30 s so slow
+  responses are never misreported as failures.
 
 ## Roadmap
 
@@ -491,6 +532,6 @@ Full tokens and usage rules are in
 | 03 | Cleaning, transformation, validation, ETL and Parquet outputs | Complete |
 | 04 | Intelligence: hourly forecasting, anomaly detection and evaluation | Complete |
 | 05 | Serving: PostgreSQL ingestion, versioned API, real inference, analytics | Complete |
-| 06 | Experience: real-data dashboards and end-to-end interface tests | Not started |
+| 06 | Experience: real-data dashboards and end-to-end interface verification | Complete |
 
-Phases 1-5 are complete. Phase 6 is intentionally not started.
+Phases 1-6 are complete.
